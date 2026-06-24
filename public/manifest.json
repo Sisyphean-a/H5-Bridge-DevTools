@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "H5 桥接调试工具",
+  "version": "0.1.0",
+  "description": "一个用于模拟 H5 原生桥接调用的 Chrome 开发者工具扩展。",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://localhost:*/*",
+    "http://127.0.0.1/*",
+    "http://127.0.0.1:*/*",
+    "http://192.168.0.197/*",
+    "https://192.168.0.197/*",
+    "https://peru-test.kinquitto.com/*"
+  ],
+  "devtools_page": "devtools.html",
+  "background": {
+    "service_worker": "background/serviceWorker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1/*",
+        "http://127.0.0.1:*/*",
+        "http://192.168.0.197/*",
+        "https://192.168.0.197/*",
+        "https://peru-test.kinquitto.com/*"
+      ],
+      "js": ["injected/injectMain.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://localhost:*/*",
+        "http://127.0.0.1/*",
+        "http://127.0.0.1:*/*",
+        "http://192.168.0.197/*",
+        "https://192.168.0.197/*",
+        "https://peru-test.kinquitto.com/*"
+      ],
+      "js": ["content/contentScript.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
