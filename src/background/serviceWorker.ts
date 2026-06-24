@@ -50,7 +50,7 @@ function attachPanelPort(port: chrome.runtime.Port): void {
   });
 
   port.onDisconnect.addListener(() => {
-    if (panelTabId >= 0) {
+    if (panelTabId >= 0 && panelPorts.get(panelTabId) === port) {
       panelPorts.delete(panelTabId);
     }
   });
@@ -79,7 +79,9 @@ function attachContentPort(port: chrome.runtime.Port): void {
   });
 
   port.onDisconnect.addListener(() => {
-    contentPorts.delete(tabId);
+    if (contentPorts.get(tabId) === port) {
+      contentPorts.delete(tabId);
+    }
   });
 }
 

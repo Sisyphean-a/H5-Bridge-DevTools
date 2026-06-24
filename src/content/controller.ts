@@ -21,12 +21,7 @@ import {
   trimLogs,
 } from "./runtime";
 
-const runtime: ContentRuntime = {
-  port: chrome.runtime.connect({ name: "h5-bridge-content" }),
-  state: null,
-  ready: Promise.resolve(),
-  chain: Promise.resolve(),
-};
+const runtime = createRuntime();
 
 export function bootstrapContentScript(): void {
   runtime.ready = initialize().then((snapshot) => {
@@ -44,6 +39,26 @@ export function bootstrapContentScript(): void {
 
 async function initialize() {
   return initializeRuntime(runtime);
+}
+
+function createRuntime(): ContentRuntime {
+  const port = chrome.runtime.connect({ name: "h5-bridge-content" });
+  const runtime: ContentRuntime = {
+    port,
+    portConnected: true,
+    state: null,
+    ready: Promise.resolve(),
+    chain: Promise.resolve(),
+  };
+
+  port.onDisconnect.addListener(() => {
+    if (runtime.port !== port) {
+      return;
+    }
+    runtime.portConnected = false;
+  });
+
+  return runtime;
 }
 
 async function handlePageMessage(

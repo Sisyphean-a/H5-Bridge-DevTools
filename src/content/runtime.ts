@@ -24,6 +24,7 @@ export interface RuntimeState {
 
 export interface ContentRuntime {
   port: chrome.runtime.Port;
+  portConnected: boolean;
   state: RuntimeState | null;
   ready: Promise<void>;
   chain: Promise<unknown>;
@@ -156,6 +157,9 @@ export function postContentMessage(
   runtime: ContentRuntime,
   message: ContentPortMessage,
 ): void {
+  if (!runtime.portConnected) {
+    return;
+  }
   runtime.port.postMessage(message);
 }
 
