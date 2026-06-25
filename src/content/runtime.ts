@@ -62,12 +62,18 @@ export async function mutateRuntime(
   task: (state: RuntimeState) => Promise<void>,
 ): Promise<void> {
   runtime.chain = runtime.chain.then(async () => {
-    if (!runtime.state) {
+    if (!runtime.state || !runtime.portConnected) {
       return;
     }
 
     await task(runtime.state);
+    if (!runtime.portConnected) {
+      return;
+    }
     await persistRuntime(runtime);
+    if (!runtime.portConnected) {
+      return;
+    }
     publishSnapshot(runtime);
   });
 

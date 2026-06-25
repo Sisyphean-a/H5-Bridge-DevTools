@@ -14,6 +14,11 @@ export function syncSnapshotState(
   const hasUnsavedNewRule =
     current.ruleDraft &&
     !snapshot.rules.some((rule) => rule.id === current.ruleDraft?.id);
+  const shouldPreserveDraft =
+    Boolean(current.ruleDraft) &&
+    Boolean(selectedRule) &&
+    current.ruleDraft?.id === selectedRule?.id &&
+    !isDraftInSyncWithRule(current.ruleDraft, selectedRule);
 
   return {
     ...current,
@@ -21,12 +26,29 @@ export function syncSnapshotState(
     selectedRuleId: hasUnsavedNewRule
       ? current.ruleDraft?.id ?? null
       : selectedRule?.id ?? null,
-    ruleDraft: hasUnsavedNewRule
+    ruleDraft: hasUnsavedNewRule || shouldPreserveDraft
       ? current.ruleDraft
       : selectedRule
         ? createRuleDraft(selectedRule)
         : null,
   };
+}
+
+function isDraftInSyncWithRule(
+  draft: NonNullable<AppViewState["ruleDraft"]>,
+  rule: BridgeMockRule,
+): boolean {
+  const nextDraft = createRuleDraft(rule);
+  return (
+    draft.id === nextDraft.id &&
+    draft.name === nextDraft.name &&
+    draft.enabled === nextDraft.enabled &&
+    draft.matchEvent === nextDraft.matchEvent &&
+    draft.delayMs === nextDraft.delayMs &&
+    draft.mode === nextDraft.mode &&
+    draft.eventName === nextDraft.eventName &&
+    draft.detailText === nextDraft.detailText
+  );
 }
 
 export function extractRulesFromImport(value: unknown): BridgeMockRule[] | null {

@@ -4,7 +4,7 @@ import type { BridgeMockRule, ImportStrategy } from "../shared/ruleTypes";
 export type PanelTabId = "rules" | "logs" | "manual" | "settings";
 
 export interface ToastState {
-  level: "info" | "error";
+  level: "success" | "info" | "error";
   message: string;
 }
 

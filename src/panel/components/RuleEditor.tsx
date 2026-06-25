@@ -1,4 +1,10 @@
-import type { ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
 import { presetRuleOptions } from "../../shared/presets";
 import { panelTheme } from "../designSystem";
 import type { RuleEditorProps } from "../types";
@@ -17,17 +23,31 @@ export function RuleEditor({
   onLoadPreset,
   onBack,
 }: RuleEditorProps) {
+  const containerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!draft) {
+      return;
+    }
+    containerRef.current?.focus();
+  }, [draft]);
+
   if (!draft) {
     return <EmptyEditor />;
   }
 
   return (
     <section
+      ref={containerRef}
+      tabIndex={-1}
+      onKeyDownCapture={(event) => handleEditorKeyDown(event, onSave)}
+      onMouseDownCapture={(event) => handleEditorMouseBack(event, isNarrow, onBack)}
       style={{
         display: "flex",
         flexDirection: "column",
         height: "100%",
         background: panelTheme.panel,
+        outline: "none",
       }}
     >
       <div
@@ -174,6 +194,48 @@ export function RuleEditor({
       </div>
     </section>
   );
+}
+
+function handleEditorKeyDown(
+  event: ReactKeyboardEvent<HTMLElement>,
+  onSave: RuleEditorProps["onSave"],
+): void {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    event.stopPropagation();
+    onSave();
+    return;
+  }
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    target.isContentEditable ||
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  );
+}
+
+function handleEditorMouseBack(
+  event: ReactMouseEvent<HTMLElement>,
+  isNarrow: boolean,
+  onBack: RuleEditorProps["onBack"],
+): void {
+  if (!isNarrow || !onBack || event.button !== 3) {
+    return;
+  }
+  if (isEditableTarget(event.target)) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  onBack();
 }
 
 function FormRow({

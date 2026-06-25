@@ -24,16 +24,30 @@ import {
 const runtime = createRuntime();
 
 export function bootstrapContentScript(): void {
+  const handlePortMessage = (message: BackgroundToContentMessage) => {
+    if (!runtime.portConnected) {
+      return;
+    }
+    void runtime.ready.then(() => handlePanelCommand(message.command));
+  };
+
+  const handleWindowMessage = (event: MessageEvent<PageBridgeCallMessage>) => {
+    if (!runtime.portConnected) {
+      return;
+    }
+    void runtime.ready.then(() => handlePageMessage(event));
+  };
+
   runtime.ready = initialize().then((snapshot) => {
     postContentMessage(runtime, { type: "CONTENT_READY", snapshot });
   });
 
-  runtime.port.onMessage.addListener((message: BackgroundToContentMessage) => {
-    void runtime.ready.then(() => handlePanelCommand(message.command));
-  });
+  runtime.port.onMessage.addListener(handlePortMessage);
+  window.addEventListener("message", handleWindowMessage);
 
-  window.addEventListener("message", (event) => {
-    void runtime.ready.then(() => handlePageMessage(event));
+  runtime.port.onDisconnect.addListener(() => {
+    runtime.port.onMessage.removeListener(handlePortMessage);
+    window.removeEventListener("message", handleWindowMessage);
   });
 }
 

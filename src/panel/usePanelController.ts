@@ -112,7 +112,7 @@ export function usePanelController(tabId: number) {
     });
   }
 
-  function setToast(level: "info" | "error", message: string) {
+  function setToast(level: "success" | "info" | "error", message: string) {
     setState((current) => ({
       ...current,
       toast: { level, message },
@@ -155,7 +155,7 @@ export function usePanelController(tabId: number) {
     }
 
     postCommand({ type: "UPSERT_RULE", rule: nextRule.rule });
-    setToast("info", "规则已保存");
+    setToast("success", "规则已保存");
   }
 
   function deleteRule() {

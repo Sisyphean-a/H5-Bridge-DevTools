@@ -29,8 +29,16 @@ body {
   border-radius: 4px;
   color: #202124;
   box-shadow: 0 2px 8px rgba(60, 64, 67, 0.15);
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.toast--success {
+  border-left-color: #188038;
+  background: rgba(232, 245, 233, 0.98);
 }
 
 .toast--error {
   border-left-color: #d93025;
+  background: rgba(252, 232, 230, 0.98);
 }

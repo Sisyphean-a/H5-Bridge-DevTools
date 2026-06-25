@@ -240,7 +240,13 @@ export function App({ tabId }: AppProps) {
 
       {state.toast ? (
         <div
-          className={`toast ${state.toast.level === "error" ? "toast--error" : ""}`}
+          className={`toast ${
+            state.toast.level === "success"
+              ? "toast--success"
+              : state.toast.level === "error"
+                ? "toast--error"
+                : ""
+          }`}
         >
           {state.toast.message}
         </div>
