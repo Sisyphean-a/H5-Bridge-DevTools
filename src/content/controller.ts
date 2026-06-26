@@ -6,12 +6,8 @@ import type {
 } from "../shared/messageTypes";
 import { cloneJson } from "../shared/json";
 import {
-  duplicateSender,
-  findEquivalentResponseIndex,
   findMatchingSender,
   getActiveResponse,
-  mergeImportedSenders,
-  normalizeSenders,
 } from "../shared/rules";
 import type { OriginBridgeSettings } from "../shared/ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
@@ -27,6 +23,17 @@ import {
   syncSettingsToPage,
   trimLogs,
 } from "./runtime";
+import {
+  deleteResponseState,
+  deleteSenderState,
+  duplicateSenderState,
+  importSendersState,
+  setActiveResponseState,
+  toggleSenderState,
+  updateHitCountState,
+  upsertResponseState,
+  upsertSenderState,
+} from "./senderState";
 
 const runtime = createRuntime();
 
@@ -194,130 +201,37 @@ async function handlePanelCommand(command: PanelCommand): Promise<void> {
 }
 
 async function upsertSender(sender: BridgeSender) {
-  await mutateRuntime(runtime, async (state) => {
-    const nextSender: BridgeSender = {
-      ...cloneJson(sender),
-      meta: {
-        ...sender.meta,
-        createdAt: sender.meta?.createdAt ?? Date.now(),
-        updatedAt: Date.now(),
-        hitCount: sender.meta?.hitCount ?? 0,
-      },
-    };
-    const index = state.originState.senders.findIndex((item) => item.id === sender.id);
-    state.originState.senders =
-      index >= 0
-        ? state.originState.senders.map((item, itemIndex) =>
-            itemIndex === index ? nextSender : item,
-          )
-        : [...state.originState.senders, nextSender];
-    state.originState.senders = normalizeSenders(state.originState.senders);
-  });
+  const now = Date.now();
+  await updateSenders((senders) => upsertSenderState(senders, sender, now));
 }
 
 async function deleteSender(senderId: string) {
-  await mutateRuntime(runtime, async (state) => {
-    state.originState.senders = state.originState.senders.filter(
-      (sender) => sender.id !== senderId,
-    );
-    state.originState.senders = normalizeSenders(state.originState.senders);
-  });
+  await updateSenders((senders) => deleteSenderState(senders, senderId));
 }
 
 async function duplicateSenderById(senderId: string) {
-  await mutateRuntime(runtime, async (state) => {
-    const source = state.originState.senders.find((sender) => sender.id === senderId);
-    if (!source) {
-      return;
-    }
-    state.originState.senders = [...state.originState.senders, duplicateSender(source)];
-    state.originState.senders = normalizeSenders(state.originState.senders);
-  });
+  await updateSenders((senders) => duplicateSenderState(senders, senderId));
 }
 
 async function toggleSender(senderId: string, enabled: boolean) {
-  await mutateRuntime(runtime, async (state) => {
-    state.originState.senders = state.originState.senders.map((sender) =>
-      sender.id === senderId
-        ? {
-            ...sender,
-            enabled,
-            meta: { ...sender.meta, updatedAt: Date.now() },
-          }
-        : sender,
-    );
-    state.originState.senders = normalizeSenders(state.originState.senders);
-  });
+  const now = Date.now();
+  await updateSenders((senders) => toggleSenderState(senders, senderId, enabled, now));
 }
 
 async function setActiveResponse(senderId: string, responseId: string | null) {
-  await mutateRuntime(runtime, async (state) => {
-    state.originState.senders = state.originState.senders.map((sender) => {
-      if (sender.id !== senderId) {
-        return sender;
-      }
-      const nextActiveId =
-        responseId === null
-          ? null
-          : sender.responses.some((response) => response.id === responseId)
-            ? responseId
-            : sender.activeResponseId;
-      return {
-        ...sender,
-        activeResponseId: nextActiveId,
-        meta: { ...sender.meta, updatedAt: Date.now() },
-      };
-    });
-    state.originState.senders = normalizeSenders(state.originState.senders);
-  });
+  const now = Date.now();
+  await updateSenders((senders) =>
+    setActiveResponseState(senders, senderId, responseId, now),
+  );
 }
 
 async function upsertResponse(senderId: string, response: BridgeResponseOption) {
-  await mutateRuntime(runtime, async (state) => {
-    state.originState.senders = state.originState.senders.map((sender) => {
-      if (sender.id !== senderId) {
-        return sender;
-      }
-      const nextResponse: BridgeResponseOption = {
-        ...cloneJson(response),
-        meta: {
-          ...response.meta,
-          createdAt: response.meta?.createdAt ?? Date.now(),
-          updatedAt: Date.now(),
-          hitCount: response.meta?.hitCount ?? 0,
-        },
-      };
-      const index = findEquivalentResponseIndex(sender.responses, nextResponse);
-      const wasEmpty = sender.responses.length === 0;
-      const responses =
-        index >= 0
-          ? sender.responses.map((item, itemIndex) =>
-              itemIndex === index ? nextResponse : item,
-            )
-          : [...sender.responses, nextResponse];
-      const activeResponseId =
-        index < 0 && wasEmpty ? nextResponse.id : sender.activeResponseId;
-      return { ...sender, responses, activeResponseId };
-    });
-    state.originState.senders = normalizeSenders(state.originState.senders);
-  });
+  const now = Date.now();
+  await updateSenders((senders) => upsertResponseState(senders, senderId, response, now));
 }
 
 async function deleteResponse(senderId: string, responseId: string) {
-  await mutateRuntime(runtime, async (state) => {
-    state.originState.senders = state.originState.senders.map((sender) => {
-      if (sender.id !== senderId) {
-        return sender;
-      }
-      const responses = sender.responses.filter((item) => item.id !== responseId);
-      const activeResponseId =
-        sender.activeResponseId === responseId
-          ? (responses[0]?.id ?? null)
-          : sender.activeResponseId;
-      return { ...sender, responses, activeResponseId };
-    });
-    state.originState.senders = normalizeSenders(state.originState.senders);
-  });
+  await updateSenders((senders) => deleteResponseState(senders, senderId, responseId));
 }
 
 async function triggerResponse(senderId: string, responseId: string) {
@@ -341,14 +255,7 @@ async function importSenders(
   senders: BridgeSender[],
   strategy: "merge" | "replace" | "appendDisabled",
 ) {
-  await mutateRuntime(runtime, async (state) => {
-    state.originState.senders = mergeImportedSenders(
-      state.originState.senders,
-      senders,
-      strategy,
-    );
-    state.originState.senders = normalizeSenders(state.originState.senders);
-  });
+  await updateSenders((current) => importSendersState(current, senders, strategy));
 }
 
 async function clearLogs() {
@@ -417,33 +324,8 @@ async function dispatchActiveResponse(senderId: string, responseId: string) {
 }
 
 async function updateHitCount(senderId: string, responseId: string) {
-  await mutateRuntime(runtime, async (state) => {
-    state.originState.senders = state.originState.senders.map((sender) =>
-      sender.id === senderId
-        ? {
-            ...sender,
-            responses: sender.responses.map((response) =>
-              response.id === responseId
-                ? {
-                    ...response,
-                    meta: {
-                      ...response.meta,
-                      updatedAt: Date.now(),
-                      hitCount: (response.meta?.hitCount ?? 0) + 1,
-                    },
-                  }
-                : response,
-            ),
-            meta: {
-              ...sender.meta,
-              updatedAt: Date.now(),
-              hitCount: (sender.meta?.hitCount ?? 0) + 1,
-            },
-          }
-        : sender,
-    );
-    state.originState.senders = normalizeSenders(state.originState.senders);
-  });
+  const now = Date.now();
+  await updateSenders((senders) => updateHitCountState(senders, senderId, responseId, now));
 }
 
 async function pushWarn(eventName: string, payload: unknown, message: string) {
@@ -464,5 +346,13 @@ async function pushError(message: string, payload: unknown) {
       payload,
       message,
     });
+  });
+}
+
+async function updateSenders(
+  updater: (senders: BridgeSender[]) => BridgeSender[],
+): Promise<void> {
+  await mutateRuntime(runtime, async (state) => {
+    state.originState.senders = updater(state.originState.senders);
   });
 }
