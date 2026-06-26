@@ -1,5 +1,5 @@
 export type BridgeResponseMode = "dispatchEvent";
-export type ImportStrategy = "merge" | "replace" | "appendDisabled";
+export type ImportStrategy = "merge" | "replace" | "appendUnpaired";
 
 export interface BridgeMockRule {
   id: string;

@@ -45,25 +45,6 @@ export function duplicateSenderState(
   return source ? normalizeSenders([...senders, duplicateSender(source)]) : senders;
 }
 
-export function toggleSenderState(
-  senders: BridgeSender[],
-  senderId: string,
-  enabled: boolean,
-  now = Date.now(),
-): BridgeSender[] {
-  return normalizeSenders(
-    senders.map((sender) =>
-      sender.id === senderId
-        ? {
-            ...sender,
-            enabled,
-            meta: { ...sender.meta, updatedAt: now },
-          }
-        : sender,
-    ),
-  );
-}
-
 export function setActiveResponseState(
   senders: BridgeSender[],
   senderId: string,

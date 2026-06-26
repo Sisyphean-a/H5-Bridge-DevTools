@@ -11,7 +11,6 @@ interface PresetResponseSeed {
 interface PresetSenderSeed {
   id: string;
   name: string;
-  enabled: boolean;
   matchEvent: string;
   responses: PresetResponseSeed[];
 }
@@ -20,7 +19,6 @@ const presetSenderSeeds: PresetSenderSeed[] = [
   {
     id: "preset-login",
     name: "登录",
-    enabled: true,
     matchEvent: "toLogin",
     responses: [
       {
@@ -40,7 +38,6 @@ const presetSenderSeeds: PresetSenderSeed[] = [
   {
     id: "preset-camera",
     name: "相机",
-    enabled: true,
     matchEvent: "openCamera",
     responses: [
       {
@@ -60,7 +57,6 @@ const presetSenderSeeds: PresetSenderSeed[] = [
   {
     id: "preset-contact",
     name: "联系人",
-    enabled: true,
     matchEvent: "getContact",
     responses: [
       {
@@ -80,7 +76,6 @@ const presetSenderSeeds: PresetSenderSeed[] = [
   {
     id: "preset-liveness",
     name: "活体检测",
-    enabled: true,
     matchEvent: "startLiveness",
     responses: [
       {
@@ -100,7 +95,6 @@ const presetSenderSeeds: PresetSenderSeed[] = [
   {
     id: "preset-location",
     name: "定位",
-    enabled: true,
     matchEvent: "getLocation",
     responses: [
       {
@@ -114,7 +108,6 @@ const presetSenderSeeds: PresetSenderSeed[] = [
   {
     id: "preset-upload-big-json",
     name: "上传大 JSON",
-    enabled: true,
     matchEvent: "uploadBigJson",
     responses: [
       {
@@ -128,7 +121,6 @@ const presetSenderSeeds: PresetSenderSeed[] = [
   {
     id: "preset-base-request",
     name: "baseRequest",
-    enabled: true,
     matchEvent: "baseRequest",
     responses: [
       {
@@ -165,7 +157,6 @@ function instantiateSender(seed: PresetSenderSeed): BridgeSender {
   return {
     id: createId("sender"),
     name: seed.name,
-    enabled: seed.enabled,
     matchEvent: seed.matchEvent,
     responses,
     activeResponseId: responses[0]?.id ?? null,
@@ -201,7 +192,6 @@ export function createBlankSender(): BridgeSender {
   return {
     id: createId("sender"),
     name: "新发送",
-    enabled: true,
     matchEvent: "",
     responses: [response],
     activeResponseId: response.id,

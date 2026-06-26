@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   deleteResponseState,
   setActiveResponseState,
-  toggleSenderState,
   updateHitCountState,
   upsertResponseState,
   upsertSenderState,
@@ -29,20 +28,6 @@ describe("content sender state", () => {
         meta: { createdAt: 200, updatedAt: 200, hitCount: 8 },
       }),
     ]);
-  });
-
-  it("toggleSenderState 会切换启用状态并刷新更新时间", () => {
-    const sender = createSender("sender-1", {
-      enabled: true,
-      meta: { createdAt: 10, updatedAt: 20, hitCount: 1 },
-    });
-
-    const result = toggleSenderState([sender], sender.id, false, 300);
-
-    expect(result[0]).toMatchObject({
-      enabled: false,
-      meta: { createdAt: 10, updatedAt: 300, hitCount: 1 },
-    });
   });
 
   it("setActiveResponseState 遇到不存在的 responseId 会保留原值", () => {

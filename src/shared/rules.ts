@@ -5,11 +5,15 @@ import { createBlankSender } from "./presets";
 import type { ImportStrategy } from "./ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
 
+type LegacyBridgeSender = BridgeSender & { enabled?: boolean };
+
 export function findMatchingSender(
   senders: BridgeSender[],
   eventName: string,
 ): BridgeSender | undefined {
-  return senders.find((sender) => sender.enabled && sender.matchEvent === eventName);
+  return senders.find(
+    (sender) => sender.matchEvent === eventName && Boolean(getActiveResponse(sender)),
+  );
 }
 
 export function getActiveResponse(
@@ -45,7 +49,6 @@ export function duplicateSender(sender: BridgeSender): BridgeSender {
     ...cloned,
     id: createId("sender"),
     name: `${sender.name} 副本`,
-    enabled: false,
     matchEvent: "",
     activeResponseId: cloned.responses[0]?.id ?? null,
     meta: { createdAt: now, updatedAt: now, hitCount: 0 },
@@ -112,7 +115,7 @@ export function mergeImportedSenders(
   }
 
   const normalized = importedSenders.map((sender) =>
-    normalizeImportedSender(sender, strategy === "appendDisabled"),
+    normalizeImportedSender(sender, strategy === "appendUnpaired"),
   );
 
   return normalizeSenders([...currentSenders, ...normalized]);
@@ -158,32 +161,36 @@ export function findEquivalentResponseIndex(
 
 function normalizeImportedSender(
   sender: BridgeSender,
-  forceDisabled: boolean,
+  clearActiveResponse: boolean,
 ): BridgeSender {
   const now = Date.now();
-  const cloned = cloneSenderWithNewIds(sender);
+  const cloned = normalizeSenderShape(cloneSenderWithNewIds(sender));
   return {
     ...cloned,
     id: createId("sender"),
-    enabled: forceDisabled ? false : sender.enabled,
+    activeResponseId: clearActiveResponse ? null : cloned.activeResponseId,
     meta: { createdAt: now, updatedAt: now, hitCount: 0 },
   };
 }
 
 function normalizeSenderShape(sender: BridgeSender): BridgeSender {
-  const cloned = cloneJson(sender);
+  const cloned = cloneJson(sender) as LegacyBridgeSender;
   const responses = dedupeResponsesByIdentity(cloned.responses ?? []);
+  const legacyEnabled = cloned.enabled ?? true;
   const activeResponseId =
-    cloned.activeResponseId && responses.some((response) => response.id === cloned.activeResponseId)
+    legacyEnabled &&
+    cloned.activeResponseId &&
+    responses.some((response) => response.id === cloned.activeResponseId)
       ? cloned.activeResponseId
       : null;
 
   return {
-    ...cloned,
+    id: cloned.id,
     name: cloned.name.trim(),
     matchEvent: cloned.matchEvent.trim(),
     responses,
     activeResponseId,
+    meta: cloned.meta,
   };
 }
 
@@ -216,7 +223,6 @@ function mergeSenderPair(base: BridgeSender, incoming: BridgeSender): BridgeSend
   return {
     ...base,
     name: mergeSenderName(base, incoming),
-    enabled: base.enabled || incoming.enabled,
     responses,
     activeResponseId: pickActiveResponseId(base, incoming, responses),
     meta: {
@@ -264,8 +270,6 @@ function pickActiveResponseId(
 ): string | null {
   const responseIds = new Set(responses.map((response) => response.id));
   const candidates = [
-    base.enabled ? base.activeResponseId : null,
-    incoming.enabled ? incoming.activeResponseId : null,
     base.activeResponseId,
     incoming.activeResponseId,
     responses[0]?.id ?? null,

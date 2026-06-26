@@ -9,7 +9,7 @@ import {
   findMatchingSender,
   getActiveResponse,
 } from "../shared/rules";
-import type { OriginBridgeSettings } from "../shared/ruleTypes";
+import type { ImportStrategy, OriginBridgeSettings } from "../shared/ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
 import {
   appendLog,
@@ -29,7 +29,6 @@ import {
   duplicateSenderState,
   importSendersState,
   setActiveResponseState,
-  toggleSenderState,
   updateHitCountState,
   upsertResponseState,
   upsertSenderState,
@@ -164,9 +163,6 @@ async function handlePanelCommand(command: PanelCommand): Promise<void> {
     case "DUPLICATE_SENDER":
       await duplicateSenderById(command.senderId);
       return;
-    case "TOGGLE_SENDER":
-      await toggleSender(command.senderId, command.enabled);
-      return;
     case "SET_ACTIVE_RESPONSE":
       await setActiveResponse(command.senderId, command.responseId);
       return;
@@ -213,11 +209,6 @@ async function duplicateSenderById(senderId: string) {
   await updateSenders((senders) => duplicateSenderState(senders, senderId));
 }
 
-async function toggleSender(senderId: string, enabled: boolean) {
-  const now = Date.now();
-  await updateSenders((senders) => toggleSenderState(senders, senderId, enabled, now));
-}
-
 async function setActiveResponse(senderId: string, responseId: string | null) {
   const now = Date.now();
   await updateSenders((senders) =>
@@ -253,7 +244,7 @@ async function triggerResponse(senderId: string, responseId: string) {
 
 async function importSenders(
   senders: BridgeSender[],
-  strategy: "merge" | "replace" | "appendDisabled",
+  strategy: ImportStrategy,
 ) {
   await updateSenders((current) => importSendersState(current, senders, strategy));
 }

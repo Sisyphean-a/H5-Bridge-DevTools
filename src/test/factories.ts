@@ -38,7 +38,6 @@ export function createSender(
   const base: BridgeSender = {
     id,
     name: `sender-${id}`,
-    enabled: true,
     matchEvent: `event-${id}`,
     responses,
     activeResponseId,

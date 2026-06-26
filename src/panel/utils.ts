@@ -6,7 +6,6 @@ export function createSenderDraft(sender: BridgeSender): SenderDraft {
   return {
     id: sender.id,
     name: sender.name,
-    enabled: sender.enabled,
     matchEvent: sender.matchEvent,
   };
 }

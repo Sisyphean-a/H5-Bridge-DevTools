@@ -148,12 +148,22 @@ function normalizeSenders(senders: BridgeSender[]): BridgeSender[] {
   return normalizeSenderCollection(
     senders.map((sender) => {
       const responses = cloneJson(sender.responses ?? []);
+      const legacyEnabled = (sender as BridgeSender & { enabled?: boolean }).enabled ?? true;
       const activeResponseId = responses.some(
         (response) => response.id === sender.activeResponseId,
       )
-        ? sender.activeResponseId
+        ? legacyEnabled
+          ? sender.activeResponseId
+          : null
         : null;
-      return { ...sender, responses, activeResponseId };
+      return {
+        id: sender.id,
+        name: sender.name,
+        matchEvent: sender.matchEvent,
+        responses,
+        activeResponseId,
+        meta: sender.meta,
+      };
     }),
   );
 }

@@ -78,11 +78,7 @@ function syncResponseDraft(
 }
 
 function isSenderDraftDirty(draft: SenderDraft, fresh: SenderDraft): boolean {
-  return (
-    draft.name !== fresh.name ||
-    draft.enabled !== fresh.enabled ||
-    draft.matchEvent !== fresh.matchEvent
-  );
+  return draft.name !== fresh.name || draft.matchEvent !== fresh.matchEvent;
 }
 
 function isResponseDraftDirty(draft: ResponseDraft, fresh: ResponseDraft): boolean {

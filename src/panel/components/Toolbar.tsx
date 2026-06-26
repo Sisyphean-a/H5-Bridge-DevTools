@@ -195,11 +195,11 @@ export function Toolbar({
             borderRadius: 2,
             fontSize: 11,
           }}
-        >
-          <option value="merge">导入：合并</option>
-          <option value="replace">导入：替换</option>
-          <option value="appendDisabled">导入：追加为禁用</option>
-        </select>
+          >
+            <option value="merge">导入：合并</option>
+            <option value="replace">导入：替换</option>
+            <option value="appendUnpaired">导入：追加但不关联</option>
+          </select>
         <ToolbarButton label="导入" onClick={() => fileRef.current?.click()} />
         <ToolbarButton label="导出" onClick={onExportRules} />
         <ToolbarButton label="清空日志" onClick={onClearLogs} danger />

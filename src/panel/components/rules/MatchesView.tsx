@@ -1,6 +1,6 @@
 import type { BridgeSender } from "../../../shared/senderTypes";
 import type { PanelController } from "../../usePanelController";
-import { Badge, EmptyState, PaneHeader, SearchField, StatusDot, ToggleSwitch } from "./RulesShared";
+import { Badge, EmptyState, PaneHeader, SearchField, StatusDot } from "./RulesShared";
 
 export function MatchesView({ controller }: { controller: PanelController }) {
   return (
@@ -44,19 +44,12 @@ function MatchCard({
   return (
     <article className="match-card">
       <div className="match-card__header">
-        <ToggleSwitch
-          checked={sender.enabled}
-          title={sender.enabled ? "禁用发送" : "启用发送"}
-          onChange={(enabled) =>
-            controller.postCommand({ type: "TOGGLE_SENDER", senderId: sender.id, enabled })
-          }
-        />
         <div className="row-card__content">
           <p className="row-card__title">{sender.name}</p>
           <p className="row-card__subtitle mono">{sender.matchEvent || "(空事件名)"}</p>
         </div>
         <Badge tone={hasActive ? "green" : "red"}>
-          {hasActive ? "自动配对中" : "无自动响应"}
+          {hasActive ? "已关联响应" : "未关联响应"}
         </Badge>
         <button
           type="button"

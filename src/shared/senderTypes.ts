@@ -19,7 +19,6 @@ export interface BridgeResponseOption {
 export interface BridgeSender {
   id: string;
   name: string;
-  enabled: boolean;
   matchEvent: string;
   responses: BridgeResponseOption[];
   activeResponseId: string | null;

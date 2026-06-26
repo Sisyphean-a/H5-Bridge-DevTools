@@ -135,7 +135,6 @@ function buildSenderFromDraft(draft: SenderDraft, source: BridgeSender): BridgeS
   return {
     ...source,
     name: draft.name.trim(),
-    enabled: draft.enabled,
     matchEvent: draft.matchEvent.trim(),
     meta: { ...source.meta, updatedAt: Date.now() },
   };

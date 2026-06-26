@@ -48,13 +48,6 @@ export function applyPreviewCommand(
       };
     case "DUPLICATE_SENDER":
       return { ...snapshot, senders: appendDuplicate(snapshot.senders, command.senderId) };
-    case "TOGGLE_SENDER":
-      return {
-        ...snapshot,
-        senders: snapshot.senders.map((sender) =>
-          sender.id === command.senderId ? { ...sender, enabled: command.enabled } : sender,
-        ),
-      };
     case "SET_ACTIVE_RESPONSE":
       return {
         ...snapshot,

@@ -61,22 +61,6 @@ export function SenderDetailPane({
               }
             />
           </Field>
-          <Field label="启用状态">
-            <button
-              type="button"
-              className="control-button"
-              onClick={() =>
-                controller.setState((current) => ({
-                  ...current,
-                  senderDraft: current.senderDraft
-                    ? { ...current.senderDraft, enabled: !current.senderDraft.enabled }
-                    : null,
-                }))
-              }
-            >
-              {senderDraft.enabled ? "当前已启用" : "当前已禁用"}
-            </button>
-          </Field>
           <Field label="匹配事件" span2>
             <input
               className="control-field mono"

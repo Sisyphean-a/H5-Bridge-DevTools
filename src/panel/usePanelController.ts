@@ -81,7 +81,6 @@ export interface PanelController {
   filteredLogs: BridgeLogItem[];
   selectedSender: BridgeSender | null;
   selectedResponseRecord: ResponseRecord | null;
-  enabledSenderCount: number;
   responseCount: number;
   pairedSenderCount: number;
   postCommand: (command: Parameters<typeof postCommand>[1]) => void;
@@ -141,10 +140,6 @@ export function usePanelController(tabId: number): PanelController {
     () => findResponseRecord(senders, state.selectedResponse),
     [senders, state.selectedResponse],
   );
-  const enabledSenderCount = useMemo(
-    () => senders.filter((sender) => sender.enabled).length,
-    [senders],
-  );
   const responseCount = useMemo(() => countResponses(senders), [senders]);
   const pairedSenderCount = useMemo(() => countPairedSenders(senders), [senders]);
   const context: PanelActionContext = { portRef, setState, state, tabId };
@@ -159,7 +154,6 @@ export function usePanelController(tabId: number): PanelController {
     filteredLogs,
     selectedSender,
     selectedResponseRecord,
-    enabledSenderCount,
     responseCount,
     pairedSenderCount,
     postCommand: (command) => postCommand(context, command),

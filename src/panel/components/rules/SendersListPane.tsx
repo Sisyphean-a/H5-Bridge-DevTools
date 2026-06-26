@@ -1,15 +1,12 @@
 import type { ChangeEvent } from "react";
 import type { BridgeSender } from "../../../shared/senderTypes";
 import type { PanelController } from "../../usePanelController";
-import { Badge, EmptyState, PaneHeader, SearchField, ToggleSwitch } from "./RulesShared";
+import { Badge, EmptyState, PaneHeader, SearchField } from "./RulesShared";
 
 export function SendersListPane({ controller }: { controller: PanelController }) {
   return (
     <section className="workspace-pane">
-      <PaneHeader
-        title="发送列表"
-        subtitle={`已启用 ${controller.enabledSenderCount} / 共 ${controller.filteredSenders.length} 条`}
-      />
+      <PaneHeader title="发送列表" subtitle={`共 ${controller.filteredSenders.length} 条发送`} />
       <div className="workspace-pane__body is-list">
         <div className="stack workspace-section">
           <div className="search-row">
@@ -79,6 +76,7 @@ function SenderRow({
 }) {
   const activeResponse =
     sender.responses.find((item) => item.id === sender.activeResponseId) ?? null;
+  const hasActiveResponse = Boolean(activeResponse);
   const isSelected = controller.state.selectedSenderId === sender.id;
   return (
     <button
@@ -87,18 +85,14 @@ function SenderRow({
       onClick={() => controller.selectSender(sender.id)}
     >
       <div className="row-card__top">
-        <ToggleSwitch
-          checked={sender.enabled}
-          title={sender.enabled ? "禁用发送" : "启用发送"}
-          onChange={(enabled) =>
-            controller.postCommand({ type: "TOGGLE_SENDER", senderId: sender.id, enabled })
-          }
-        />
         <div className="row-card__content">
           <p className="row-card__title">{sender.name}</p>
           <p className="row-card__subtitle mono">{sender.matchEvent || "(空事件名)"}</p>
         </div>
         <div className="row-card__aside">
+          <Badge tone={hasActiveResponse ? "green" : "red"}>
+            {hasActiveResponse ? "自动响应中" : "未关联响应"}
+          </Badge>
           <Badge tone="blue">{sender.responses.length} 响应</Badge>
           {activeResponse ? <Badge tone="orange">{activeResponse.delayMs}ms</Badge> : null}
         </div>

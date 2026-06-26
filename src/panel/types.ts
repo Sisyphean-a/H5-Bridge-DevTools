@@ -12,7 +12,6 @@ export interface ToastState {
 export interface SenderDraft {
   id: string;
   name: string;
-  enabled: boolean;
   matchEvent: string;
 }
 

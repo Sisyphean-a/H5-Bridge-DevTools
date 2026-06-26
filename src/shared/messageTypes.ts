@@ -7,7 +7,6 @@ export type PanelCommand =
   | { type: "UPSERT_SENDER"; sender: BridgeSender }
   | { type: "DELETE_SENDER"; senderId: string }
   | { type: "DUPLICATE_SENDER"; senderId: string }
-  | { type: "TOGGLE_SENDER"; senderId: string; enabled: boolean }
   | { type: "SET_ACTIVE_RESPONSE"; senderId: string; responseId: string | null }
   | { type: "UPSERT_RESPONSE"; senderId: string; response: BridgeResponseOption }
   | { type: "DELETE_RESPONSE"; senderId: string; responseId: string }
