@@ -6,6 +6,7 @@ import type {
 import { cloneJson } from "./json";
 import { migrateStorageState, type LegacyStorageState } from "./migrate";
 import { getPresetSenders } from "./presets";
+import { normalizeSenders as normalizeSenderCollection } from "./rules";
 import type { OriginBridgeSettings } from "./ruleTypes";
 import type { BridgeSender, SenderExportPayload } from "./senderTypes";
 import { LEGACY_STORAGE_KEY, STORAGE_KEY } from "./constants";
@@ -144,13 +145,15 @@ function normalizeOrigins(
 }
 
 function normalizeSenders(senders: BridgeSender[]): BridgeSender[] {
-  return senders.map((sender) => {
-    const responses = cloneJson(sender.responses ?? []);
-    const activeResponseId = responses.some(
-      (response) => response.id === sender.activeResponseId,
-    )
-      ? sender.activeResponseId
-      : null;
-    return { ...sender, responses, activeResponseId };
-  });
+  return normalizeSenderCollection(
+    senders.map((sender) => {
+      const responses = cloneJson(sender.responses ?? []);
+      const activeResponseId = responses.some(
+        (response) => response.id === sender.activeResponseId,
+      )
+        ? sender.activeResponseId
+        : null;
+      return { ...sender, responses, activeResponseId };
+    }),
+  );
 }

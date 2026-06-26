@@ -1,6 +1,7 @@
 import type { BridgeLogItem, BridgeStorageState, OriginBridgeState } from "./bridgeTypes";
 import { createId } from "./id";
 import { cloneJson } from "./json";
+import { normalizeSenders } from "./rules";
 import type { BridgeMockRule, OriginBridgeSettings } from "./ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
 
@@ -39,7 +40,7 @@ export function migrateRuleToSender(rule: BridgeMockRule): BridgeSender {
 
 function migrateOriginState(state: LegacyOriginBridgeState): OriginBridgeState {
   return {
-    senders: (state.rules ?? []).map(migrateRuleToSender),
+    senders: normalizeSenders((state.rules ?? []).map(migrateRuleToSender)),
     logs: cloneJson(state.logs ?? []),
     settings: { ...state.settings },
   };

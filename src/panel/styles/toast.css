@@ -1,0 +1,24 @@
+.toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--panel-blue);
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 10px;
+  color: var(--panel-text);
+  box-shadow: var(--panel-shadow);
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.toast--success {
+  border-left-color: var(--panel-green);
+  background: rgba(230, 244, 234, 0.98);
+}
+
+.toast--error {
+  border-left-color: var(--panel-red);
+  background: rgba(252, 232, 230, 0.98);
+}

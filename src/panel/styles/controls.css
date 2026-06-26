@@ -1,0 +1,220 @@
+.subtab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--panel-text-secondary);
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.subtab-button:hover {
+  background: var(--panel-surface);
+}
+
+.subtab-button.is-active {
+  border-bottom-color: var(--panel-blue);
+  background: var(--panel-surface);
+  color: var(--panel-blue);
+  font-weight: 600;
+}
+
+.subtab-button__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--panel-blue-bg);
+  color: var(--panel-blue);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.control-field,
+.control-select,
+.control-textarea {
+  width: 100%;
+  border: 1px solid var(--panel-border);
+  border-radius: 2px;
+  background: var(--panel-surface);
+  color: var(--panel-text);
+}
+
+.control-field,
+.control-select {
+  height: 24px;
+  padding: 0 6px;
+}
+
+.control-textarea {
+  min-height: 180px;
+  padding: 6px 8px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.control-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 2px;
+  background: var(--panel-surface);
+  color: var(--panel-text);
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.control-button:hover {
+  background: var(--panel-surface-alt);
+}
+
+.control-button:disabled,
+.control-select:disabled,
+.control-field:disabled,
+.control-textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.control-button:disabled:hover {
+  background: var(--panel-surface);
+}
+
+.control-button--primary {
+  border-color: transparent;
+  background: var(--panel-blue);
+  color: #fff;
+}
+
+.control-button--danger {
+  border-color: transparent;
+  background: var(--panel-red);
+  color: #fff;
+}
+
+.control-button--ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--panel-text-secondary);
+}
+
+.control-button--quiet {
+  height: 22px;
+  padding: 0 6px;
+}
+
+.control-button--success {
+  border-color: transparent;
+  background: var(--panel-green);
+  color: #fff;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.badge--blue {
+  background: var(--panel-blue-bg);
+  color: var(--panel-blue);
+}
+
+.badge--green {
+  background: var(--panel-green-bg);
+  color: var(--panel-green);
+}
+
+.badge--orange {
+  background: var(--panel-orange-bg);
+  color: var(--panel-orange);
+}
+
+.badge--red {
+  background: var(--panel-red-bg);
+  color: var(--panel-red);
+}
+
+.badge--gray {
+  background: var(--panel-surface-alt);
+  color: var(--panel-text-secondary);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid var(--panel-border-strong);
+  background: transparent;
+}
+
+.status-dot.is-active {
+  border-color: var(--panel-green);
+  background: var(--panel-green);
+}
+
+.toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 24px;
+  height: 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--panel-border);
+  cursor: pointer;
+  padding: 0;
+}
+
+.toggle.is-checked {
+  background: var(--panel-blue);
+}
+
+.toggle__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.24);
+  transition: left 0.16s ease;
+}
+
+.toggle.is-checked .toggle__thumb {
+  left: 12px;
+}
+
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--panel-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  color: var(--panel-blue);
+}

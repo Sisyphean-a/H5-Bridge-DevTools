@@ -7,9 +7,11 @@ import type {
 import { cloneJson } from "../shared/json";
 import {
   duplicateSender,
+  findEquivalentResponseIndex,
   findMatchingSender,
   getActiveResponse,
   mergeImportedSenders,
+  normalizeSenders,
 } from "../shared/rules";
 import type { OriginBridgeSettings } from "../shared/ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
@@ -209,6 +211,7 @@ async function upsertSender(sender: BridgeSender) {
             itemIndex === index ? nextSender : item,
           )
         : [...state.originState.senders, nextSender];
+    state.originState.senders = normalizeSenders(state.originState.senders);
   });
 }
 
@@ -217,6 +220,7 @@ async function deleteSender(senderId: string) {
     state.originState.senders = state.originState.senders.filter(
       (sender) => sender.id !== senderId,
     );
+    state.originState.senders = normalizeSenders(state.originState.senders);
   });
 }
 
@@ -227,6 +231,7 @@ async function duplicateSenderById(senderId: string) {
       return;
     }
     state.originState.senders = [...state.originState.senders, duplicateSender(source)];
+    state.originState.senders = normalizeSenders(state.originState.senders);
   });
 }
 
@@ -241,6 +246,7 @@ async function toggleSender(senderId: string, enabled: boolean) {
           }
         : sender,
     );
+    state.originState.senders = normalizeSenders(state.originState.senders);
   });
 }
 
@@ -262,6 +268,7 @@ async function setActiveResponse(senderId: string, responseId: string | null) {
         meta: { ...sender.meta, updatedAt: Date.now() },
       };
     });
+    state.originState.senders = normalizeSenders(state.originState.senders);
   });
 }
 
@@ -280,7 +287,7 @@ async function upsertResponse(senderId: string, response: BridgeResponseOption) 
           hitCount: response.meta?.hitCount ?? 0,
         },
       };
-      const index = sender.responses.findIndex((item) => item.id === response.id);
+      const index = findEquivalentResponseIndex(sender.responses, nextResponse);
       const wasEmpty = sender.responses.length === 0;
       const responses =
         index >= 0
@@ -292,6 +299,7 @@ async function upsertResponse(senderId: string, response: BridgeResponseOption) 
         index < 0 && wasEmpty ? nextResponse.id : sender.activeResponseId;
       return { ...sender, responses, activeResponseId };
     });
+    state.originState.senders = normalizeSenders(state.originState.senders);
   });
 }
 
@@ -303,9 +311,12 @@ async function deleteResponse(senderId: string, responseId: string) {
       }
       const responses = sender.responses.filter((item) => item.id !== responseId);
       const activeResponseId =
-        sender.activeResponseId === responseId ? null : sender.activeResponseId;
+        sender.activeResponseId === responseId
+          ? (responses[0]?.id ?? null)
+          : sender.activeResponseId;
       return { ...sender, responses, activeResponseId };
     });
+    state.originState.senders = normalizeSenders(state.originState.senders);
   });
 }
 
@@ -336,6 +347,7 @@ async function importSenders(
       senders,
       strategy,
     );
+    state.originState.senders = normalizeSenders(state.originState.senders);
   });
 }
 
@@ -430,6 +442,7 @@ async function updateHitCount(senderId: string, responseId: string) {
           }
         : sender,
     );
+    state.originState.senders = normalizeSenders(state.originState.senders);
   });
 }
 

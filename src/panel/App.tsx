@@ -1,10 +1,8 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { formatJson } from "../shared/json";
-import { panelTheme } from "./designSystem";
 import { LogsPanel } from "./components/LogsPanel";
 import { ManualEmit } from "./components/ManualEmit";
-import { RuleEditor } from "./components/RuleEditor";
-import { RulesList } from "./components/RulesList";
+import { RuleWorkspace } from "./components/RuleWorkspace";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Toolbar } from "./components/Toolbar";
 import { usePanelController } from "./usePanelController";
@@ -15,15 +13,7 @@ interface AppProps {
 
 export function App({ tabId }: AppProps) {
   const controller = usePanelController(tabId);
-  const {
-    state,
-    setState,
-    filteredRules,
-    filteredLogs,
-    presetRules,
-    postCommand,
-    selectRuleById,
-  } = controller;
+  const { state, setState, filteredLogs, postCommand } = controller;
   const [isWide, setIsWide] = useState(() => window.innerWidth >= 1080);
 
   useEffect(() => {
@@ -35,65 +25,13 @@ export function App({ tabId }: AppProps) {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const enabledCount =
-    state.snapshot?.senders.filter((sender) => sender.enabled).length ?? 0;
-
-  const rulesContent = (
-    <>
-      <div style={rulesPaneStyle}>
-        <RulesList
-          rules={filteredRules}
-          selectedRuleId={state.selectedRuleId}
-          filterText={state.filterText}
-          presetRules={presetRules}
-          enabledCount={enabledCount}
-          onFilterChange={(value) =>
-            setState((current) => ({ ...current, filterText: value }))
-          }
-          onSelect={selectRuleById}
-          onAddBlank={controller.addBlankRule}
-          onAddFromPreset={controller.addPresetRule}
-          onToggle={(senderId, enabled) =>
-            postCommand({ type: "TOGGLE_SENDER", senderId, enabled })
-          }
-        />
-      </div>
-      <div style={editorPaneStyle}>
-        <RuleEditor
-          draft={state.ruleDraft}
-          isNarrow={!isWide}
-          onChange={(draft) =>
-            setState((current) => ({ ...current, ruleDraft: draft }))
-          }
-          onSave={controller.saveRule}
-          onDelete={controller.deleteRule}
-          onDuplicate={controller.duplicateRule}
-          onReset={controller.resetCurrentRule}
-          onFormatJson={controller.formatCurrentRuleJson}
-          onTestEmit={controller.testEmitDraft}
-          presets={presetRules}
-          onLoadPreset={controller.loadPresetToDraft}
-          onBack={
-            !isWide
-              ? () =>
-                  setState((current) => ({
-                    ...current,
-                    narrowRuleEditorOpen: false,
-                  }))
-              : undefined
-          }
-        />
-      </div>
-    </>
-  );
-
   const logsContent = (
     <LogsPanel
       logs={filteredLogs}
       activeEvent={state.activeLogEvent}
       compact={isWide}
       onCopyPayload={controller.copyText}
-      onCreateRule={controller.createRuleFromSelectedLog}
+      onCreateRule={controller.createSenderFromLog}
       onReplay={(logId) => postCommand({ type: "REPLAY_LOG_RESPONSE", logId })}
       onFilterEvent={(eventName) =>
         setState((current) => ({ ...current, activeLogEvent: eventName }))
@@ -105,7 +43,7 @@ export function App({ tabId }: AppProps) {
   );
 
   return (
-    <div style={appShellStyle}>
+    <div className="app-shell">
       <Toolbar
         snapshot={state.snapshot}
         importStrategy={state.importStrategy}
@@ -127,21 +65,11 @@ export function App({ tabId }: AppProps) {
           setState((current) => ({ ...current, importStrategy: value }))
         }
       />
-
-      <div style={contentStyle}>
-        {isWide && state.activeTab === "rules" ? (
-          <>
-            {rulesContent}
-            <div style={logsPaneStyle}>{logsContent}</div>
-          </>
-        ) : null}
-
-        {isWide && state.activeTab === "logs" ? (
-          <div style={singlePaneStyle}>{logsContent}</div>
-        ) : null}
-
-        {isWide && state.activeTab === "manual" ? (
-          <div style={singlePaneStyle}>
+      <div className="app-content">
+        {state.activeTab === "rules" ? <RuleWorkspace controller={controller} isWide={isWide} /> : null}
+        {state.activeTab === "logs" ? <div className="rules-frame">{logsContent}</div> : null}
+        {state.activeTab === "manual" ? (
+          <div className="rules-frame">
             <ManualEmit
               draft={state.manualEmit}
               onChange={(draft) =>
@@ -152,82 +80,8 @@ export function App({ tabId }: AppProps) {
             />
           </div>
         ) : null}
-
-        {isWide && state.activeTab === "settings" ? (
-          <div style={singlePaneStyle}>
-            <SettingsPanel
-              settings={state.snapshot?.settings ?? null}
-              onChange={(patch) =>
-                postCommand({ type: "UPDATE_SETTINGS", settings: patch })
-              }
-            />
-          </div>
-        ) : null}
-
-        {!isWide && state.activeTab === "rules" ? (
-          <div style={singlePaneStyle}>
-            {state.narrowRuleEditorOpen && state.ruleDraft ? (
-              <RuleEditor
-                draft={state.ruleDraft}
-                isNarrow
-                onChange={(draft) =>
-                  setState((current) => ({ ...current, ruleDraft: draft }))
-                }
-                onSave={controller.saveRule}
-                onDelete={controller.deleteRule}
-                onDuplicate={controller.duplicateRule}
-                onReset={controller.resetCurrentRule}
-                onFormatJson={controller.formatCurrentRuleJson}
-                onTestEmit={controller.testEmitDraft}
-                presets={presetRules}
-                onLoadPreset={controller.loadPresetToDraft}
-                onBack={() =>
-                  setState((current) => ({
-                    ...current,
-                    narrowRuleEditorOpen: false,
-                  }))
-                }
-              />
-            ) : (
-              <RulesList
-                rules={filteredRules}
-                selectedRuleId={state.selectedRuleId}
-                filterText={state.filterText}
-                presetRules={presetRules}
-                enabledCount={enabledCount}
-                onFilterChange={(value) =>
-                  setState((current) => ({ ...current, filterText: value }))
-                }
-                onSelect={selectRuleById}
-                onAddBlank={controller.addBlankRule}
-                onAddFromPreset={controller.addPresetRule}
-                onToggle={(senderId, enabled) =>
-                  postCommand({ type: "TOGGLE_SENDER", senderId, enabled })
-                }
-              />
-            )}
-          </div>
-        ) : null}
-
-        {!isWide && state.activeTab === "logs" ? (
-          <div style={singlePaneStyle}>{logsContent}</div>
-        ) : null}
-
-        {!isWide && state.activeTab === "manual" ? (
-          <div style={singlePaneStyle}>
-            <ManualEmit
-              draft={state.manualEmit}
-              onChange={(draft) =>
-                setState((current) => ({ ...current, manualEmit: draft }))
-              }
-              onSend={controller.sendManualEmit}
-              onFormat={controller.formatManualEmitDraft}
-            />
-          </div>
-        ) : null}
-
-        {!isWide && state.activeTab === "settings" ? (
-          <div style={singlePaneStyle}>
+        {state.activeTab === "settings" ? (
+          <div className="rules-frame">
             <SettingsPanel
               settings={state.snapshot?.settings ?? null}
               onChange={(patch) =>
@@ -237,7 +91,6 @@ export function App({ tabId }: AppProps) {
           </div>
         ) : null}
       </div>
-
       {state.toast ? (
         <div
           className={`toast ${
@@ -254,46 +107,3 @@ export function App({ tabId }: AppProps) {
     </div>
   );
 }
-
-const appShellStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  height: "100%",
-  background: panelTheme.bg,
-  color: panelTheme.text,
-};
-
-const contentStyle: CSSProperties = {
-  display: "flex",
-  flex: 1,
-  minHeight: 0,
-  overflow: "hidden",
-};
-
-const singlePaneStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  minHeight: 0,
-};
-
-const rulesPaneStyle: CSSProperties = {
-  width: 320,
-  minWidth: 260,
-  maxWidth: 380,
-  borderRight: `1px solid ${panelTheme.border}`,
-  minHeight: 0,
-};
-
-const editorPaneStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 320,
-  borderRight: `1px solid ${panelTheme.border}`,
-  minHeight: 0,
-};
-
-const logsPaneStyle: CSSProperties = {
-  width: 420,
-  minWidth: 320,
-  maxWidth: 520,
-  minHeight: 0,
-};

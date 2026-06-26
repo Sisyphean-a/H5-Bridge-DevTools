@@ -1,23 +1,12 @@
 import type { BridgeLogItem, BridgePanelSnapshot } from "../shared/bridgeTypes";
 import type { ImportStrategy } from "../shared/ruleTypes";
-import type { BridgeSender } from "../shared/senderTypes";
 
 export type PanelTabId = "rules" | "logs" | "manual" | "settings";
+export type RulesSubTab = "senders" | "responses" | "matches";
 
 export interface ToastState {
   level: "success" | "info" | "error";
   message: string;
-}
-
-export interface RuleDraft {
-  id: string;
-  name: string;
-  enabled: boolean;
-  matchEvent: string;
-  delayMs: string;
-  mode: "dispatchEvent";
-  eventName: string;
-  detailText: string;
 }
 
 export interface SenderDraft {
@@ -27,11 +16,16 @@ export interface SenderDraft {
   matchEvent: string;
 }
 
+export interface SelectedResponseRef {
+  senderId: string;
+  responseId: string;
+}
+
 export interface ResponseDraft {
   senderId: string;
   id: string;
   name: string;
-  delayMs: number;
+  delayMs: string;
   mode: "dispatchEvent";
   eventName: string;
   detailText: string;
@@ -44,11 +38,9 @@ export interface ManualEmitDraft {
 
 export interface AppViewState {
   snapshot: BridgePanelSnapshot | null;
-  selectedRuleId: string | null;
-  ruleDraft: RuleDraft | null;
   selectedSenderId: string | null;
   senderDraft: SenderDraft | null;
-  selectedResponse: { senderId: string; responseId: string } | null;
+  selectedResponse: SelectedResponseRef | null;
   responseDraft: ResponseDraft | null;
   manualEmit: ManualEmitDraft;
   filterText: string;
@@ -56,35 +48,8 @@ export interface AppViewState {
   toast: ToastState | null;
   importStrategy: ImportStrategy;
   activeTab: PanelTabId;
-  narrowRuleEditorOpen: boolean;
-}
-
-export interface RuleEditorProps {
-  draft: RuleDraft | null;
-  isNarrow: boolean;
-  onChange: (draft: RuleDraft) => void;
-  onSave: () => void;
-  onDelete: () => void;
-  onDuplicate: () => void;
-  onReset: () => void;
-  onFormatJson: () => void;
-  onTestEmit: () => void;
-  presets: BridgeSender[];
-  onLoadPreset: (sender: BridgeSender | null) => void;
-  onBack?: () => void;
-}
-
-export interface RulesListProps {
-  rules: BridgeSender[];
-  selectedRuleId: string | null;
-  filterText: string;
-  presetRules: BridgeSender[];
-  enabledCount: number;
-  onFilterChange: (value: string) => void;
-  onSelect: (senderId: string) => void;
-  onAddBlank: () => void;
-  onAddFromPreset: (presetId: string) => void;
-  onToggle: (senderId: string, enabled: boolean) => void;
+  rulesSubTab: RulesSubTab;
+  narrowDetailOpen: boolean;
 }
 
 export interface LogsPanelProps {
