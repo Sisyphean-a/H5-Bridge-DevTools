@@ -2,10 +2,11 @@ import { createBlankResponse } from "../shared/presets";
 import { safeParseJson } from "../shared/json";
 import { validateResponse } from "../shared/rules";
 import type { BridgeResponseOption } from "../shared/senderTypes";
-import { createResponseDraft, createSenderDraft, formatResponseDraftJson } from "./utils";
+import { createResponseDraft, formatResponseDraftJson } from "./utils";
 import { findResponseRecord, findSender } from "./controllerFilters";
 import type { PanelActionContext } from "./actionContext";
 import { postCommand, setToast } from "./actionContext";
+import { openResponseState } from "./selectionState";
 import type { AppViewState, ResponseDraft } from "./types";
 
 export function selectResponse(
@@ -18,16 +19,9 @@ export function selectResponse(
   if (!record) {
     return;
   }
-  context.setState((current) => ({
-    ...current,
-    activeTab: "rules",
-    rulesSubTab,
-    selectedSenderId: record.sender.id,
-    senderDraft: createSenderDraft(record.sender),
-    selectedResponse: { senderId, responseId },
-    responseDraft: createResponseDraft(senderId, record.response),
-    narrowDetailOpen: true,
-  }));
+  context.setState((current) =>
+    openResponseState(current, record.sender, record.response, rulesSubTab),
+  );
 }
 
 export function createResponseForSender(context: PanelActionContext, senderId: string): void {
@@ -41,16 +35,7 @@ export function createResponseForSender(context: PanelActionContext, senderId: s
   if (sender.responses.length === 0 || !sender.activeResponseId) {
     postCommand(context, { type: "SET_ACTIVE_RESPONSE", senderId, responseId: response.id });
   }
-  context.setState((current) => ({
-    ...current,
-    activeTab: "rules",
-    rulesSubTab: "responses",
-    selectedSenderId: sender.id,
-    senderDraft: createSenderDraft(sender),
-    selectedResponse: { senderId, responseId: response.id },
-    responseDraft: createResponseDraft(senderId, response),
-    narrowDetailOpen: true,
-  }));
+  context.setState((current) => openResponseState(current, sender, response));
 }
 
 export function saveResponse(context: PanelActionContext): void {

@@ -2,10 +2,11 @@ import type { BridgeLogItem } from "../shared/bridgeTypes";
 import { createBlankSender, getPresetSenderById } from "../shared/presets";
 import { createSenderFromLog, findEquivalentResponseIndex, validateSender } from "../shared/rules";
 import type { BridgeSender } from "../shared/senderTypes";
-import { createResponseDraft, createSenderDraft } from "./utils";
+import { createSenderDraft } from "./utils";
 import { findSender } from "./controllerFilters";
 import type { PanelActionContext } from "./actionContext";
 import { postCommand, setToast } from "./actionContext";
+import { openResponseState, openSenderState, selectSenderState } from "./selectionState";
 import type { SenderDraft } from "./types";
 
 export function selectSender(context: PanelActionContext, senderId: string): void {
@@ -13,21 +14,18 @@ export function selectSender(context: PanelActionContext, senderId: string): voi
   if (!sender) {
     return;
   }
-  context.setState((current) => ({
-    ...current,
-    selectedSenderId: sender.id,
-    senderDraft: createSenderDraft(sender),
-    narrowDetailOpen: true,
-  }));
+  context.setState((current) => selectSenderState(current, sender));
 }
 
 export function openSenderTab(context: PanelActionContext, senderId: string): void {
-  selectSender(context, senderId);
+  const sender = findSender(context.state.snapshot?.senders ?? [], senderId);
+  if (!sender) {
+    return;
+  }
   context.setState((current) => ({
-    ...current,
+    ...selectSenderState(current, sender),
     activeTab: "rules",
     rulesSubTab: "senders",
-    narrowDetailOpen: true,
   }));
 }
 
@@ -130,18 +128,7 @@ function hydrateNewSender(
   sender: BridgeSender,
   rulesSubTab: "senders" | "responses",
 ): void {
-  context.setState((current) => ({
-    ...current,
-    activeTab: "rules",
-    rulesSubTab,
-    selectedSenderId: sender.id,
-    senderDraft: createSenderDraft(sender),
-    selectedResponse: sender.responses[0]
-      ? { senderId: sender.id, responseId: sender.responses[0].id }
-      : null,
-    responseDraft: sender.responses[0] ? createResponseDraft(sender.id, sender.responses[0]) : null,
-    narrowDetailOpen: true,
-  }));
+  context.setState((current) => openSenderState(current, sender, rulesSubTab));
 }
 
 function buildSenderFromDraft(draft: SenderDraft, source: BridgeSender): BridgeSender {
@@ -206,16 +193,15 @@ function appendResponsesToExistingSender(
     ? { senderId: target.id, responseId: focusResponse.id }
     : null;
 
-  context.setState((current) => ({
-    ...current,
-    activeTab: "rules",
-    rulesSubTab,
-    selectedSenderId: target.id,
-    senderDraft: createSenderDraft(target),
-    selectedResponse,
-    responseDraft: focusResponse
-      ? createResponseDraft(target.id, focusResponse)
-      : current.responseDraft,
-    narrowDetailOpen: true,
-  }));
+  context.setState((current) =>
+    focusResponse
+      ? openResponseState(current, target, focusResponse, rulesSubTab)
+      : {
+          ...selectSenderState(current, target),
+          activeTab: "rules",
+          rulesSubTab,
+          selectedResponse,
+          responseDraft: current.responseDraft,
+        },
+  );
 }
