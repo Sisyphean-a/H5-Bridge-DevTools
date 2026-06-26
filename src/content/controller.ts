@@ -1,12 +1,18 @@
 import { SOURCE_PAGE } from "../shared/constants";
-import { createId } from "../shared/id";
 import type {
   BackgroundToContentMessage,
   PageBridgeCallMessage,
   PanelCommand,
 } from "../shared/messageTypes";
 import { cloneJson } from "../shared/json";
-import { findMatchingRule, mergeImportedRules } from "../shared/rules";
+import {
+  duplicateSender,
+  findMatchingSender,
+  getActiveResponse,
+  mergeImportedSenders,
+} from "../shared/rules";
+import type { OriginBridgeSettings } from "../shared/ruleTypes";
+import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
 import {
   appendLog,
   dispatchToPage,
@@ -16,7 +22,6 @@ import {
   publishSnapshot,
   readEventName,
   type ContentRuntime,
-  type RuntimeState,
   syncSettingsToPage,
   trimLogs,
 } from "./runtime";
@@ -112,16 +117,28 @@ async function recordBridgeCall(message: PageBridgeCallMessage): Promise<void> {
     return;
   }
 
-  const matchedRule = findMatchingRule(runtime.state.originState.rules, eventName);
-  if (!matchedRule) {
-    await pushWarn(eventName, payload);
+  const matchedSender = findMatchingSender(runtime.state.originState.senders, eventName);
+  if (!matchedSender) {
+    await pushWarn(eventName, payload, `No sender matched for event "${eventName}".`);
     return;
   }
 
-  await updateRuleHitCount(matchedRule.id);
+  const activeResponse = getActiveResponse(matchedSender);
+  if (!activeResponse) {
+    await pushWarn(
+      eventName,
+      payload,
+      `Sender "${matchedSender.name}" has no active response.`,
+    );
+    return;
+  }
+
+  await updateHitCount(matchedSender.id, activeResponse.id);
+  const senderId = matchedSender.id;
+  const responseId = activeResponse.id;
   window.setTimeout(() => {
-    void dispatchMockFromRule(matchedRule.id);
-  }, matchedRule.response.delayMs);
+    void dispatchActiveResponse(senderId, responseId);
+  }, activeResponse.delayMs);
 }
 
 async function handlePanelCommand(command: PanelCommand): Promise<void> {
@@ -129,20 +146,32 @@ async function handlePanelCommand(command: PanelCommand): Promise<void> {
     case "REQUEST_SNAPSHOT":
       publishSnapshot(runtime);
       return;
-    case "UPSERT_RULE":
-      await upsertRule(command.rule);
+    case "UPSERT_SENDER":
+      await upsertSender(command.sender);
       return;
-    case "DELETE_RULE":
-      await deleteRule(command.ruleId);
+    case "DELETE_SENDER":
+      await deleteSender(command.senderId);
       return;
-    case "DUPLICATE_RULE":
-      await duplicateRuleById(command.ruleId);
+    case "DUPLICATE_SENDER":
+      await duplicateSenderById(command.senderId);
       return;
-    case "TOGGLE_RULE":
-      await toggleRule(command.ruleId, command.enabled);
+    case "TOGGLE_SENDER":
+      await toggleSender(command.senderId, command.enabled);
       return;
-    case "IMPORT_RULES":
-      await importRules(command.rules, command.strategy);
+    case "SET_ACTIVE_RESPONSE":
+      await setActiveResponse(command.senderId, command.responseId);
+      return;
+    case "UPSERT_RESPONSE":
+      await upsertResponse(command.senderId, command.response);
+      return;
+    case "DELETE_RESPONSE":
+      await deleteResponse(command.senderId, command.responseId);
+      return;
+    case "TRIGGER_RESPONSE":
+      await triggerResponse(command.senderId, command.responseId);
+      return;
+    case "IMPORT_SENDERS":
+      await importSenders(command.senders, command.strategy);
       return;
     case "CLEAR_LOGS":
       await clearLogs();
@@ -162,77 +191,149 @@ async function handlePanelCommand(command: PanelCommand): Promise<void> {
   }
 }
 
-async function upsertRule(rule: RuntimeState["originState"]["rules"][number]) {
+async function upsertSender(sender: BridgeSender) {
   await mutateRuntime(runtime, async (state) => {
-    const nextRule = {
-      ...cloneJson(rule),
+    const nextSender: BridgeSender = {
+      ...cloneJson(sender),
       meta: {
-        ...rule.meta,
-        createdAt: rule.meta?.createdAt ?? Date.now(),
+        ...sender.meta,
+        createdAt: sender.meta?.createdAt ?? Date.now(),
         updatedAt: Date.now(),
-        hitCount: rule.meta?.hitCount ?? 0,
+        hitCount: sender.meta?.hitCount ?? 0,
       },
     };
-    const index = state.originState.rules.findIndex((item) => item.id === rule.id);
-    state.originState.rules =
+    const index = state.originState.senders.findIndex((item) => item.id === sender.id);
+    state.originState.senders =
       index >= 0
-        ? state.originState.rules.map((item, itemIndex) =>
-            itemIndex === index ? nextRule : item,
+        ? state.originState.senders.map((item, itemIndex) =>
+            itemIndex === index ? nextSender : item,
           )
-        : [...state.originState.rules, nextRule];
+        : [...state.originState.senders, nextSender];
   });
 }
 
-async function deleteRule(ruleId: string) {
+async function deleteSender(senderId: string) {
   await mutateRuntime(runtime, async (state) => {
-    state.originState.rules = state.originState.rules.filter((rule) => rule.id !== ruleId);
-  });
-}
-
-async function duplicateRuleById(ruleId: string) {
-  await mutateRuntime(runtime, async (state) => {
-    const sourceRule = state.originState.rules.find((rule) => rule.id === ruleId);
-    if (!sourceRule) {
-      return;
-    }
-
-    const copy = cloneJson(sourceRule);
-    copy.id = createId("rule");
-    copy.name = `${sourceRule.name} 副本`;
-    copy.meta = {
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      hitCount: 0,
-    };
-    state.originState.rules = [...state.originState.rules, copy];
-  });
-}
-
-async function toggleRule(ruleId: string, enabled: boolean) {
-  await mutateRuntime(runtime, async (state) => {
-    state.originState.rules = state.originState.rules.map((rule) =>
-      rule.id === ruleId
-        ? {
-            ...rule,
-            enabled,
-            meta: {
-              ...rule.meta,
-              updatedAt: Date.now(),
-            },
-          }
-        : rule,
+    state.originState.senders = state.originState.senders.filter(
+      (sender) => sender.id !== senderId,
     );
   });
 }
 
-async function importRules(
-  rules: RuntimeState["originState"]["rules"],
+async function duplicateSenderById(senderId: string) {
+  await mutateRuntime(runtime, async (state) => {
+    const source = state.originState.senders.find((sender) => sender.id === senderId);
+    if (!source) {
+      return;
+    }
+    state.originState.senders = [...state.originState.senders, duplicateSender(source)];
+  });
+}
+
+async function toggleSender(senderId: string, enabled: boolean) {
+  await mutateRuntime(runtime, async (state) => {
+    state.originState.senders = state.originState.senders.map((sender) =>
+      sender.id === senderId
+        ? {
+            ...sender,
+            enabled,
+            meta: { ...sender.meta, updatedAt: Date.now() },
+          }
+        : sender,
+    );
+  });
+}
+
+async function setActiveResponse(senderId: string, responseId: string | null) {
+  await mutateRuntime(runtime, async (state) => {
+    state.originState.senders = state.originState.senders.map((sender) => {
+      if (sender.id !== senderId) {
+        return sender;
+      }
+      const nextActiveId =
+        responseId === null
+          ? null
+          : sender.responses.some((response) => response.id === responseId)
+            ? responseId
+            : sender.activeResponseId;
+      return {
+        ...sender,
+        activeResponseId: nextActiveId,
+        meta: { ...sender.meta, updatedAt: Date.now() },
+      };
+    });
+  });
+}
+
+async function upsertResponse(senderId: string, response: BridgeResponseOption) {
+  await mutateRuntime(runtime, async (state) => {
+    state.originState.senders = state.originState.senders.map((sender) => {
+      if (sender.id !== senderId) {
+        return sender;
+      }
+      const nextResponse: BridgeResponseOption = {
+        ...cloneJson(response),
+        meta: {
+          ...response.meta,
+          createdAt: response.meta?.createdAt ?? Date.now(),
+          updatedAt: Date.now(),
+          hitCount: response.meta?.hitCount ?? 0,
+        },
+      };
+      const index = sender.responses.findIndex((item) => item.id === response.id);
+      const wasEmpty = sender.responses.length === 0;
+      const responses =
+        index >= 0
+          ? sender.responses.map((item, itemIndex) =>
+              itemIndex === index ? nextResponse : item,
+            )
+          : [...sender.responses, nextResponse];
+      const activeResponseId =
+        index < 0 && wasEmpty ? nextResponse.id : sender.activeResponseId;
+      return { ...sender, responses, activeResponseId };
+    });
+  });
+}
+
+async function deleteResponse(senderId: string, responseId: string) {
+  await mutateRuntime(runtime, async (state) => {
+    state.originState.senders = state.originState.senders.map((sender) => {
+      if (sender.id !== senderId) {
+        return sender;
+      }
+      const responses = sender.responses.filter((item) => item.id !== responseId);
+      const activeResponseId =
+        sender.activeResponseId === responseId ? null : sender.activeResponseId;
+      return { ...sender, responses, activeResponseId };
+    });
+  });
+}
+
+async function triggerResponse(senderId: string, responseId: string) {
+  const sender = runtime.state?.originState.senders.find((item) => item.id === senderId);
+  const response = sender?.responses.find((item) => item.id === responseId);
+  if (!response) {
+    return;
+  }
+
+  dispatchToPage(response.eventName, response.detail);
+  await mutateRuntime(runtime, async (state) => {
+    state.originState.logs = appendLog(state, {
+      type: "EMIT",
+      event: response.eventName,
+      response: response.detail,
+    });
+  });
+}
+
+async function importSenders(
+  senders: BridgeSender[],
   strategy: "merge" | "replace" | "appendDisabled",
 ) {
   await mutateRuntime(runtime, async (state) => {
-    state.originState.rules = mergeImportedRules(
-      state.originState.rules,
-      rules,
+    state.originState.senders = mergeImportedSenders(
+      state.originState.senders,
+      senders,
       strategy,
     );
   });
@@ -251,7 +352,7 @@ async function setGlobalEnabled(enabled: boolean) {
   syncSettingsToPage(runtime);
 }
 
-async function updateSettings(settings: Partial<RuntimeState["originState"]["settings"]>) {
+async function updateSettings(settings: Partial<OriginBridgeSettings>) {
   await mutateRuntime(runtime, async (state) => {
     state.originState.settings = {
       ...state.originState.settings,
@@ -285,47 +386,60 @@ async function replayLogResponse(logId: string) {
   await manualEmit(log.event, cloneJson(log.response ?? {}));
 }
 
-async function dispatchMockFromRule(ruleId: string) {
-  const activeRule = runtime.state?.originState.rules.find((rule) => rule.id === ruleId);
-  if (!activeRule || !runtime.state?.globalEnabled) {
+async function dispatchActiveResponse(senderId: string, responseId: string) {
+  const sender = runtime.state?.originState.senders.find((item) => item.id === senderId);
+  const response = sender?.responses.find((item) => item.id === responseId);
+  if (!sender || !response || !runtime.state?.globalEnabled) {
     return;
   }
 
-  dispatchToPage(activeRule.response.eventName, activeRule.response.detail);
+  dispatchToPage(response.eventName, response.detail);
   await mutateRuntime(runtime, async (state) => {
     state.originState.logs = appendLog(state, {
       type: "MOCK",
-      event: activeRule.response.eventName,
-      response: activeRule.response.detail,
-      ruleId: activeRule.id,
+      event: response.eventName,
+      response: response.detail,
+      ruleId: sender.id,
     });
   });
 }
 
-async function updateRuleHitCount(ruleId: string) {
+async function updateHitCount(senderId: string, responseId: string) {
   await mutateRuntime(runtime, async (state) => {
-    state.originState.rules = state.originState.rules.map((rule) =>
-      rule.id === ruleId
+    state.originState.senders = state.originState.senders.map((sender) =>
+      sender.id === senderId
         ? {
-            ...rule,
+            ...sender,
+            responses: sender.responses.map((response) =>
+              response.id === responseId
+                ? {
+                    ...response,
+                    meta: {
+                      ...response.meta,
+                      updatedAt: Date.now(),
+                      hitCount: (response.meta?.hitCount ?? 0) + 1,
+                    },
+                  }
+                : response,
+            ),
             meta: {
-              ...rule.meta,
+              ...sender.meta,
               updatedAt: Date.now(),
-              hitCount: (rule.meta?.hitCount ?? 0) + 1,
+              hitCount: (sender.meta?.hitCount ?? 0) + 1,
             },
           }
-        : rule,
+        : sender,
     );
   });
 }
 
-async function pushWarn(eventName: string, payload: unknown) {
+async function pushWarn(eventName: string, payload: unknown, message: string) {
   await mutateRuntime(runtime, async (state) => {
     state.originState.logs = appendLog(state, {
       type: "WARN",
       event: eventName,
       payload,
-      message: `No mock rule matched for event "${eventName}".`,
+      message,
     });
   });
 }

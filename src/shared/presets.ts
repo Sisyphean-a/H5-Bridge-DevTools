@@ -1,187 +1,210 @@
 import { createId } from "./id";
-import type { BridgeMockRule } from "./ruleTypes";
+import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
 
-const presetRules: BridgeMockRule[] = [
+interface PresetResponseSeed {
+  name: string;
+  delayMs: number;
+  eventName: string;
+  detail: unknown;
+}
+
+interface PresetSenderSeed {
+  id: string;
+  name: string;
+  enabled: boolean;
+  matchEvent: string;
+  responses: PresetResponseSeed[];
+}
+
+const presetSenderSeeds: PresetSenderSeed[] = [
   {
-    id: "preset-login-success",
-    name: "登录成功",
+    id: "preset-login",
+    name: "登录",
     enabled: true,
-    match: { event: "toLogin" },
-    response: {
-      delayMs: 500,
-      mode: "dispatchEvent",
-      eventName: "toLogin",
-      detail: {
-        success: true,
-        token: "mock-token-001",
-        userId: "mock-user-001",
+    matchEvent: "toLogin",
+    responses: [
+      {
+        name: "登录成功",
+        delayMs: 500,
+        eventName: "toLogin",
+        detail: { success: true, token: "mock-token-001", userId: "mock-user-001" },
       },
-    },
-  },
-  {
-    id: "preset-login-failed",
-    name: "登录失败",
-    enabled: false,
-    match: { event: "toLogin" },
-    response: {
-      delayMs: 500,
-      mode: "dispatchEvent",
-      eventName: "toLogin",
-      detail: { success: false, msg: "mock login failed" },
-    },
-  },
-  {
-    id: "preset-camera-success",
-    name: "相机成功",
-    enabled: true,
-    match: { event: "openCamera" },
-    response: {
-      delayMs: 1000,
-      mode: "dispatchEvent",
-      eventName: "openCamera",
-      detail: {
-        success: true,
-        uri: "mock://camera/photo-001.jpg",
-        data: "mock-image-data",
+      {
+        name: "登录失败",
+        delayMs: 500,
+        eventName: "toLogin",
+        detail: { success: false, msg: "mock login failed" },
       },
-    },
+    ],
   },
   {
-    id: "preset-camera-cancel",
-    name: "相机取消",
-    enabled: false,
-    match: { event: "openCamera" },
-    response: {
-      delayMs: 800,
-      mode: "dispatchEvent",
-      eventName: "openCamera",
-      detail: { success: false, msg: "user cancelled camera" },
-    },
-  },
-  {
-    id: "preset-contact-success",
-    name: "联系人成功",
+    id: "preset-camera",
+    name: "相机",
     enabled: true,
-    match: { event: "getContact" },
-    response: {
-      delayMs: 800,
-      mode: "dispatchEvent",
-      eventName: "getContact",
-      detail: { success: true, name: "张三", phone: "13800000000" },
-    },
+    matchEvent: "openCamera",
+    responses: [
+      {
+        name: "相机成功",
+        delayMs: 1000,
+        eventName: "openCamera",
+        detail: { success: true, uri: "mock://camera/photo-001.jpg", data: "mock-image-data" },
+      },
+      {
+        name: "相机取消",
+        delayMs: 800,
+        eventName: "openCamera",
+        detail: { success: false, msg: "user cancelled camera" },
+      },
+    ],
   },
   {
-    id: "preset-contact-failed",
-    name: "联系人失败",
-    enabled: false,
-    match: { event: "getContact" },
-    response: {
-      delayMs: 800,
-      mode: "dispatchEvent",
-      eventName: "getContact",
-      detail: { success: false, msg: "user cancelled contact selection" },
-    },
-  },
-  {
-    id: "preset-liveness-success",
-    name: "活体成功",
+    id: "preset-contact",
+    name: "联系人",
     enabled: true,
-    match: { event: "startLiveness" },
-    response: {
-      delayMs: 1200,
-      mode: "dispatchEvent",
-      eventName: "startLiveness",
-      detail: { success: true, faceImg: "mock-face-image-base64" },
-    },
+    matchEvent: "getContact",
+    responses: [
+      {
+        name: "联系人成功",
+        delayMs: 800,
+        eventName: "getContact",
+        detail: { success: true, name: "张三", phone: "13800000000" },
+      },
+      {
+        name: "联系人失败",
+        delayMs: 800,
+        eventName: "getContact",
+        detail: { success: false, msg: "user cancelled contact selection" },
+      },
+    ],
   },
   {
-    id: "preset-liveness-failed",
-    name: "活体失败",
-    enabled: false,
-    match: { event: "startLiveness" },
-    response: {
-      delayMs: 1200,
-      mode: "dispatchEvent",
-      eventName: "startLiveness",
-      detail: { success: false, msg: "mock liveness failed" },
-    },
-  },
-  {
-    id: "preset-location-success",
-    name: "定位成功",
+    id: "preset-liveness",
+    name: "活体检测",
     enabled: true,
-    match: { event: "getLocation" },
-    response: {
-      delayMs: 500,
-      mode: "dispatchEvent",
-      eventName: "getLocation",
-      detail: { latitude: "-12.0464", longitude: "-77.0428" },
-    },
+    matchEvent: "startLiveness",
+    responses: [
+      {
+        name: "活体成功",
+        delayMs: 1200,
+        eventName: "startLiveness",
+        detail: { success: true, faceImg: "mock-face-image-base64" },
+      },
+      {
+        name: "活体失败",
+        delayMs: 1200,
+        eventName: "startLiveness",
+        detail: { success: false, msg: "mock liveness failed" },
+      },
+    ],
   },
   {
-    id: "preset-upload-big-json-success",
-    name: "上传大 JSON 成功",
+    id: "preset-location",
+    name: "定位",
     enabled: true,
-    match: { event: "uploadBigJson" },
-    response: {
-      delayMs: 500,
-      mode: "dispatchEvent",
-      eventName: "uploadBigJson",
-      detail: { success: "true", msg: "ok" },
-    },
+    matchEvent: "getLocation",
+    responses: [
+      {
+        name: "定位成功",
+        delayMs: 500,
+        eventName: "getLocation",
+        detail: { latitude: "-12.0464", longitude: "-77.0428" },
+      },
+    ],
   },
   {
-    id: "preset-base-request-success",
-    name: "baseRequest 成功",
+    id: "preset-upload-big-json",
+    name: "上传大 JSON",
     enabled: true,
-    match: { event: "baseRequest" },
-    response: {
-      delayMs: 500,
-      mode: "dispatchEvent",
-      eventName: "baseRequest",
-      detail: { success: true, code: "200", msg: "ok", data: {} },
-    },
+    matchEvent: "uploadBigJson",
+    responses: [
+      {
+        name: "上传成功",
+        delayMs: 500,
+        eventName: "uploadBigJson",
+        detail: { success: "true", msg: "ok" },
+      },
+    ],
+  },
+  {
+    id: "preset-base-request",
+    name: "baseRequest",
+    enabled: true,
+    matchEvent: "baseRequest",
+    responses: [
+      {
+        name: "请求成功",
+        delayMs: 500,
+        eventName: "baseRequest",
+        detail: { success: true, code: "200", msg: "ok", data: {} },
+      },
+    ],
   },
 ];
 
-export const presetRuleOptions = presetRules.map((rule) => ({
-  id: rule.id,
-  label: rule.name,
+export const presetSenderOptions = presetSenderSeeds.map((seed) => ({
+  id: seed.id,
+  label: seed.name,
 }));
 
-export function getPresetRules(): BridgeMockRule[] {
-  return presetRules.map((rule) => ({
-    ...rule,
-    match: { ...rule.match },
-    response: {
-      ...rule.response,
-      detail: JSON.parse(JSON.stringify(rule.response.detail)),
-    },
-    meta: {
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      hitCount: 0,
-    },
-  }));
-}
-
-export function createBlankRule(): BridgeMockRule {
+function instantiateResponse(seed: PresetResponseSeed): BridgeResponseOption {
   const now = Date.now();
   return {
-    id: createId("rule"),
-    name: "新规则",
+    id: createId("resp"),
+    name: seed.name,
+    delayMs: seed.delayMs,
+    mode: "dispatchEvent",
+    eventName: seed.eventName,
+    detail: JSON.parse(JSON.stringify(seed.detail)),
+    meta: { createdAt: now, updatedAt: now, hitCount: 0 },
+  };
+}
+
+function instantiateSender(seed: PresetSenderSeed): BridgeSender {
+  const now = Date.now();
+  const responses = seed.responses.map(instantiateResponse);
+  return {
+    id: createId("sender"),
+    name: seed.name,
+    enabled: seed.enabled,
+    matchEvent: seed.matchEvent,
+    responses,
+    activeResponseId: responses[0]?.id ?? null,
+    meta: { createdAt: now, updatedAt: now, hitCount: 0 },
+  };
+}
+
+export function getPresetSenders(): BridgeSender[] {
+  return presetSenderSeeds.map(instantiateSender);
+}
+
+export function getPresetSenderById(presetId: string): BridgeSender | null {
+  const seed = presetSenderSeeds.find((item) => item.id === presetId);
+  return seed ? instantiateSender(seed) : null;
+}
+
+export function createBlankResponse(): BridgeResponseOption {
+  const now = Date.now();
+  return {
+    id: createId("resp"),
+    name: "新响应",
+    delayMs: 500,
+    mode: "dispatchEvent",
+    eventName: "",
+    detail: {},
+    meta: { createdAt: now, updatedAt: now, hitCount: 0 },
+  };
+}
+
+export function createBlankSender(): BridgeSender {
+  const now = Date.now();
+  const response = createBlankResponse();
+  return {
+    id: createId("sender"),
+    name: "新发送",
     enabled: true,
-    match: { event: "" },
-    response: {
-      delayMs: 500,
-      mode: "dispatchEvent",
-      eventName: "",
-      detail: {},
-    },
-    meta: {
-      createdAt: now,
-      updatedAt: now,
-      hitCount: 0,
-    },
+    matchEvent: "",
+    responses: [response],
+    activeResponseId: response.id,
+    meta: { createdAt: now, updatedAt: now, hitCount: 0 },
   };
 }

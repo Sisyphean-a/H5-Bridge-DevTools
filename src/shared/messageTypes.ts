@@ -1,17 +1,18 @@
-import type { BridgeLogItem, BridgePanelSnapshot } from "./bridgeTypes";
-import type {
-  BridgeMockRule,
-  ImportStrategy,
-  OriginBridgeSettings,
-} from "./ruleTypes";
+import type { BridgePanelSnapshot } from "./bridgeTypes";
+import type { ImportStrategy, OriginBridgeSettings } from "./ruleTypes";
+import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
 
 export type PanelCommand =
   | { type: "REQUEST_SNAPSHOT" }
-  | { type: "UPSERT_RULE"; rule: BridgeMockRule }
-  | { type: "DELETE_RULE"; ruleId: string }
-  | { type: "DUPLICATE_RULE"; ruleId: string }
-  | { type: "TOGGLE_RULE"; ruleId: string; enabled: boolean }
-  | { type: "IMPORT_RULES"; rules: BridgeMockRule[]; strategy: ImportStrategy }
+  | { type: "UPSERT_SENDER"; sender: BridgeSender }
+  | { type: "DELETE_SENDER"; senderId: string }
+  | { type: "DUPLICATE_SENDER"; senderId: string }
+  | { type: "TOGGLE_SENDER"; senderId: string; enabled: boolean }
+  | { type: "SET_ACTIVE_RESPONSE"; senderId: string; responseId: string | null }
+  | { type: "UPSERT_RESPONSE"; senderId: string; response: BridgeResponseOption }
+  | { type: "DELETE_RESPONSE"; senderId: string; responseId: string }
+  | { type: "TRIGGER_RESPONSE"; senderId: string; responseId: string }
+  | { type: "IMPORT_SENDERS"; senders: BridgeSender[]; strategy: ImportStrategy }
   | { type: "CLEAR_LOGS" }
   | { type: "SET_GLOBAL_ENABLED"; enabled: boolean }
   | { type: "UPDATE_SETTINGS"; settings: Partial<OriginBridgeSettings> }
@@ -71,8 +72,3 @@ export type PageRuntimeMessage =
   | PageDispatchMessage
   | PageBridgeCallMessage
   | PageSettingsMessage;
-
-export interface RuleFromLogDraft {
-  rule: BridgeMockRule;
-  sourceLog: BridgeLogItem;
-}

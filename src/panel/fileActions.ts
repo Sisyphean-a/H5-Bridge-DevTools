@@ -1,9 +1,8 @@
-import type { BridgeMockRule } from "../shared/ruleTypes";
-import { createRulesExport } from "../shared/storage";
+import type { BridgeSender } from "../shared/senderTypes";
 import { safeParseJson } from "../shared/json";
 
-export function exportRulesFile(origin: string, rules: BridgeMockRule[]): void {
-  const payload = createRulesExport(origin, rules);
+export function exportSendersFile(origin: string, senders: BridgeSender[]): void {
+  const payload = { origin, senders, exportedAt: Date.now() };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
     type: "application/json",
   });
@@ -15,9 +14,9 @@ export function exportRulesFile(origin: string, rules: BridgeMockRule[]): void {
   URL.revokeObjectURL(url);
 }
 
-export function parseImportedRules(content: string): {
+export function parseImportedSenders(content: string): {
   ok: true;
-  rules: BridgeMockRule[];
+  senders: BridgeSender[];
 } | {
   ok: false;
   error: string;
@@ -31,10 +30,10 @@ export function parseImportedRules(content: string): {
     return { ok: false, error: "导入内容必须是对象" };
   }
 
-  const maybeRules = Reflect.get(parsed.value, "rules");
-  if (!Array.isArray(maybeRules)) {
-    return { ok: false, error: "导入内容中未找到 rules 数组" };
+  const maybeSenders = Reflect.get(parsed.value, "senders");
+  if (!Array.isArray(maybeSenders)) {
+    return { ok: false, error: "导入内容中未找到 senders 数组" };
   }
 
-  return { ok: true, rules: maybeRules as BridgeMockRule[] };
+  return { ok: true, senders: maybeSenders as BridgeSender[] };
 }

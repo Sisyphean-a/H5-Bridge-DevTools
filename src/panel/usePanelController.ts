@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { BridgeLogItem } from "../shared/bridgeTypes";
+import type { BackgroundToPanelMessage, PanelCommand } from "../shared/messageTypes";
 import { createId } from "../shared/id";
 import { safeParseJson } from "../shared/json";
-import type { BackgroundToPanelMessage, PanelCommand } from "../shared/messageTypes";
-import { createBlankRule, getPresetRules } from "../shared/presets";
-import { createRuleFromLog, validateRule } from "../shared/rules";
-import type { BridgeMockRule } from "../shared/ruleTypes";
-import { exportRulesFile, parseImportedRules } from "./fileActions";
+import { createBlankSender, getPresetSenders } from "../shared/presets";
+import type { BridgeSender } from "../shared/senderTypes";
+import { exportSendersFile, parseImportedSenders } from "./fileActions";
 import type { AppViewState } from "./types";
 import { requestSnapshot, syncSnapshotState } from "./helpers";
 import {
   createManualEmitDraft,
   createRuleDraft,
-  createRuleFromDraft,
   formatDraftJson,
   formatManualEmit,
 } from "./utils";
@@ -21,6 +18,10 @@ const initialState: AppViewState = {
   snapshot: null,
   selectedRuleId: null,
   ruleDraft: null,
+  selectedSenderId: null,
+  senderDraft: null,
+  selectedResponse: null,
+  responseDraft: null,
   manualEmit: createManualEmitDraft(),
   filterText: "",
   activeLogEvent: null,
@@ -32,7 +33,7 @@ const initialState: AppViewState = {
 
 export function usePanelController(tabId: number) {
   const portRef = useRef<chrome.runtime.Port | null>(null);
-  const presetRules = useMemo(() => getPresetRules(), []);
+  const presetRules = useMemo(() => getPresetSenders(), []);
   const [state, setState] = useState<AppViewState>(initialState);
 
   useEffect(() => {
@@ -83,18 +84,18 @@ export function usePanelController(tabId: number) {
   }, [state.toast]);
 
   const filteredRules = useMemo(() => {
-    const rules = state.snapshot?.rules ?? [];
+    const senders = state.snapshot?.senders ?? [];
     const filter = state.filterText.trim().toLowerCase();
     if (!filter) {
-      return rules;
+      return senders;
     }
 
-    return rules.filter((rule) => {
-      const name = rule.name.toLowerCase();
-      const eventName = rule.match.event.toLowerCase();
+    return senders.filter((sender) => {
+      const name = sender.name.toLowerCase();
+      const eventName = sender.matchEvent.toLowerCase();
       return name.includes(filter) || eventName.includes(filter);
     });
-  }, [state.filterText, state.snapshot?.rules]);
+  }, [state.filterText, state.snapshot?.senders]);
 
   const filteredLogs = useMemo(() => {
     const logs = state.snapshot?.logs ?? [];
@@ -119,16 +120,33 @@ export function usePanelController(tabId: number) {
     }));
   }
 
-  function selectRuleById(ruleId: string) {
-    const rule = state.snapshot?.rules.find((item) => item.id === ruleId);
-    if (!rule) {
+  function selectRuleById(senderId: string) {
+    const sender = state.snapshot?.senders.find((item) => item.id === senderId);
+    if (!sender) {
+      return;
+    }
+
+    const activeResponse = sender.responses.find((r) => r.id === sender.activeResponseId) ?? sender.responses[0];
+    if (!activeResponse) {
       return;
     }
 
     setState((current) => ({
       ...current,
-      selectedRuleId: rule.id,
-      ruleDraft: createRuleDraft(rule),
+      selectedRuleId: sender.id,
+      ruleDraft: createRuleDraft({
+        id: sender.id,
+        name: sender.name,
+        enabled: sender.enabled,
+        match: { event: sender.matchEvent },
+        response: {
+          delayMs: activeResponse.delayMs,
+          mode: activeResponse.mode,
+          eventName: activeResponse.eventName,
+          detail: activeResponse.detail,
+        },
+        meta: sender.meta,
+      }),
       narrowRuleEditorOpen: true,
     }));
   }
@@ -140,21 +158,55 @@ export function usePanelController(tabId: number) {
       return;
     }
 
-    const sourceRule =
-      snapshot.rules.find((rule) => rule.id === draft.id) ?? createBlankRule();
-    const nextRule = createRuleFromDraft(draft, sourceRule);
-    if (!nextRule.ok) {
-      setToast("error", nextRule.error);
+    const parsedDetail = safeParseJson(draft.detailText);
+    if (!parsedDetail.ok) {
+      setToast("error", `Detail JSON 无效: ${parsedDetail.error}`);
       return;
     }
 
-    const errors = validateRule(nextRule.rule);
-    if (errors.length > 0) {
-      setToast("error", errors[0]);
+    const delayMs = Number(draft.delayMs);
+    if (!Number.isFinite(delayMs) || delayMs < 0) {
+      setToast("error", "Delay 必须是大于等于 0 的数字");
       return;
     }
 
-    postCommand({ type: "UPSERT_RULE", rule: nextRule.rule });
+    const sender = snapshot.senders.find((s) => s.id === draft.id);
+    if (!sender) {
+      setToast("error", "找不到对应的发送规则");
+      return;
+    }
+
+    const activeResponse = sender.responses.find((r) => r.id === sender.activeResponseId);
+    if (!activeResponse) {
+      setToast("error", "找不到活跃响应");
+      return;
+    }
+
+    postCommand({
+      type: "UPSERT_SENDER",
+      sender: {
+        ...sender,
+        name: draft.name.trim(),
+        enabled: draft.enabled,
+        matchEvent: draft.matchEvent.trim(),
+        meta: { ...sender.meta, updatedAt: Date.now() },
+      },
+    });
+
+    postCommand({
+      type: "UPSERT_RESPONSE",
+      senderId: sender.id,
+      response: {
+        ...activeResponse,
+        name: draft.name.trim(),
+        delayMs,
+        mode: draft.mode,
+        eventName: draft.eventName.trim(),
+        detail: parsedDetail.value,
+        meta: { ...activeResponse.meta, updatedAt: Date.now() },
+      },
+    });
+
     setToast("success", "规则已保存");
   }
 
@@ -162,7 +214,7 @@ export function usePanelController(tabId: number) {
     if (!state.selectedRuleId) {
       return;
     }
-    postCommand({ type: "DELETE_RULE", ruleId: state.selectedRuleId });
+    postCommand({ type: "DELETE_SENDER", senderId: state.selectedRuleId });
     setState((current) => ({
       ...current,
       selectedRuleId: null,
@@ -174,15 +226,32 @@ export function usePanelController(tabId: number) {
     if (!state.selectedRuleId) {
       return;
     }
-    postCommand({ type: "DUPLICATE_RULE", ruleId: state.selectedRuleId });
+    postCommand({ type: "DUPLICATE_SENDER", senderId: state.selectedRuleId });
   }
 
   function addBlankRule() {
-    const rule = { ...createBlankRule(), id: createId("rule") };
+    const sender = createBlankSender();
+    const activeResponse = sender.responses[0];
+    if (!activeResponse) {
+      return;
+    }
+
     setState((current) => ({
       ...current,
-      selectedRuleId: rule.id,
-      ruleDraft: createRuleDraft(rule),
+      selectedRuleId: sender.id,
+      ruleDraft: createRuleDraft({
+        id: sender.id,
+        name: sender.name,
+        enabled: sender.enabled,
+        match: { event: sender.matchEvent },
+        response: {
+          delayMs: activeResponse.delayMs,
+          mode: activeResponse.mode,
+          eventName: activeResponse.eventName,
+          detail: activeResponse.detail,
+        },
+        meta: sender.meta,
+      }),
       narrowRuleEditorOpen: true,
     }));
   }
@@ -193,32 +262,104 @@ export function usePanelController(tabId: number) {
       return;
     }
 
-    const nextRule = { ...preset, id: createId("rule") };
+    const activeResponse = preset.responses[0];
+    if (!activeResponse) {
+      return;
+    }
+
+    const nextSender = { ...preset, id: createId("sender") };
     setState((current) => ({
       ...current,
-      selectedRuleId: nextRule.id,
-      ruleDraft: createRuleDraft(nextRule),
+      selectedRuleId: nextSender.id,
+      ruleDraft: createRuleDraft({
+        id: nextSender.id,
+        name: nextSender.name,
+        enabled: nextSender.enabled,
+        match: { event: nextSender.matchEvent },
+        response: {
+          delayMs: activeResponse.delayMs,
+          mode: activeResponse.mode,
+          eventName: activeResponse.eventName,
+          detail: activeResponse.detail,
+        },
+        meta: nextSender.meta,
+      }),
       narrowRuleEditorOpen: true,
     }));
   }
 
-  function loadPresetToDraft(rule: BridgeMockRule | null) {
-    if (!rule || !state.ruleDraft) {
+  function loadPresetToDraft(sender: BridgeSender | null) {
+    if (!sender) {
       return;
     }
 
-    const nextRule = {
-      ...rule,
-      id: state.ruleDraft.id,
-      meta: {
-        ...rule.meta,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      },
-    };
+    const activeResponse = sender.responses[0];
+    if (!activeResponse) {
+      return;
+    }
+
     setState((current) => ({
       ...current,
-      ruleDraft: createRuleDraft(nextRule),
+      ruleDraft: createRuleDraft({
+        id: current.ruleDraft?.id ?? createId("sender"),
+        name: sender.name,
+        enabled: sender.enabled,
+        match: { event: sender.matchEvent },
+        response: {
+          delayMs: activeResponse.delayMs,
+          mode: activeResponse.mode,
+          eventName: activeResponse.eventName,
+          detail: activeResponse.detail,
+        },
+        meta: sender.meta,
+      }),
+    }));
+  }
+
+  function resetCurrentRule() {
+    const senderId = state.selectedRuleId;
+    const snapshot = state.snapshot;
+    if (!senderId || !snapshot) {
+      return;
+    }
+
+    const sender = snapshot.senders.find((item) => item.id === senderId);
+    if (!sender) {
+      return;
+    }
+
+    const activeResponse = sender.responses.find((r) => r.id === sender.activeResponseId) ?? sender.responses[0];
+    if (!activeResponse) {
+      return;
+    }
+
+    setState((current) => ({
+      ...current,
+      ruleDraft: createRuleDraft({
+        id: sender.id,
+        name: sender.name,
+        enabled: sender.enabled,
+        match: { event: sender.matchEvent },
+        response: {
+          delayMs: activeResponse.delayMs,
+          mode: activeResponse.mode,
+          eventName: activeResponse.eventName,
+          detail: activeResponse.detail,
+        },
+        meta: sender.meta,
+      }),
+    }));
+  }
+
+  function formatCurrentRuleJson() {
+    const draft = state.ruleDraft;
+    if (!draft) {
+      return;
+    }
+
+    setState((current) => ({
+      ...current,
+      ruleDraft: formatDraftJson(draft),
     }));
   }
 
@@ -227,69 +368,135 @@ export function usePanelController(tabId: number) {
     if (!draft) {
       return;
     }
+
     const parsed = safeParseJson(draft.detailText);
     if (!parsed.ok) {
       setToast("error", `Detail JSON 无效: ${parsed.error}`);
       return;
     }
-    postCommand({
-      type: "MANUAL_EMIT",
-      eventName: draft.eventName,
-      detail: parsed.value,
-    });
-  }
 
-  function exportRules() {
-    if (!state.snapshot) {
+    const sender = state.snapshot?.senders.find((s) => s.id === draft.id);
+    if (!sender) {
+      setToast("error", "找不到对应的发送规则");
       return;
     }
-    exportRulesFile(state.snapshot.origin, state.snapshot.rules);
-  }
 
-  function importRules(content: string) {
-    const parsed = parseImportedRules(content);
-    if (!parsed.ok) {
-      setToast("error", parsed.error);
+    const activeResponse = sender.responses.find((r) => r.id === sender.activeResponseId);
+    if (!activeResponse) {
+      setToast("error", "找不到活跃响应");
       return;
     }
 
     postCommand({
-      type: "IMPORT_RULES",
-      rules: parsed.rules,
-      strategy: state.importStrategy,
+      type: "TRIGGER_RESPONSE",
+      senderId: sender.id,
+      responseId: activeResponse.id,
     });
+    setToast("success", "已触发测试");
+  }
+
+  function createRuleFromSelectedLog() {
+    const logId = state.activeLogEvent;
+    const snapshot = state.snapshot;
+    if (!logId || !snapshot) {
+      return;
+    }
+
+    const log = snapshot.logs.find((item) => item.id === logId);
+    if (!log) {
+      return;
+    }
+
+    const sender = createBlankSender();
+    sender.name = `从日志创建: ${log.event ?? "未知事件"}`;
+    sender.matchEvent = log.event ?? "";
+
+    const response = sender.responses[0];
+    if (response) {
+      response.eventName = log.event ?? "";
+      response.detail = log.payload ?? {};
+    }
+
+    setState((current) => ({
+      ...current,
+      selectedRuleId: sender.id,
+      ruleDraft: createRuleDraft({
+        id: sender.id,
+        name: sender.name,
+        enabled: sender.enabled,
+        match: { event: sender.matchEvent },
+        response: response ? {
+          delayMs: response.delayMs,
+          mode: response.mode,
+          eventName: response.eventName,
+          detail: response.detail,
+        } : {
+          delayMs: 500,
+          mode: "dispatchEvent" as const,
+          eventName: "",
+          detail: {},
+        },
+        meta: sender.meta,
+      }),
+      narrowRuleEditorOpen: true,
+      activeTab: "rules",
+    }));
   }
 
   function sendManualEmit() {
-    const parsed = safeParseJson(state.manualEmit.detailText);
+    const draft = state.manualEmit;
+    const parsed = safeParseJson(draft.detailText);
     if (!parsed.ok) {
       setToast("error", `Detail JSON 无效: ${parsed.error}`);
       return;
     }
-    if (!state.manualEmit.eventName.trim()) {
-      setToast("error", "事件名不能为空");
-      return;
-    }
+
     postCommand({
       type: "MANUAL_EMIT",
-      eventName: state.manualEmit.eventName.trim(),
+      eventName: draft.eventName.trim(),
       detail: parsed.value,
     });
+    setToast("success", "已发送");
   }
 
-  function createRuleFromSelectedLog(log: BridgeLogItem) {
-    const rule = createRuleFromLog(log);
+  function formatManualEmitDraft() {
     setState((current) => ({
       ...current,
-      selectedRuleId: rule.id,
-      ruleDraft: createRuleDraft(rule),
-      activeTab: "rules",
-      narrowRuleEditorOpen: true,
+      manualEmit: formatManualEmit(current.manualEmit),
     }));
   }
 
+  function exportRules() {
+    const snapshot = state.snapshot;
+    if (!snapshot) {
+      return;
+    }
+
+    const origin = typeof window !== "undefined" ? window.location.origin : "unknown";
+    exportSendersFile(origin, snapshot.senders);
+    setToast("success", "已导出");
+  }
+
+  function importRules(content: string) {
+    const result = parseImportedSenders(content);
+    if (!result.ok) {
+      setToast("error", result.error);
+      return;
+    }
+
+    postCommand({
+      type: "IMPORT_SENDERS",
+      senders: result.senders,
+      strategy: state.importStrategy,
+    });
+    setToast("success", "已导入");
+  }
+
   function copyText(text: string) {
-    void navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(text).then(
+      () => setToast("success", "已复制"),
+      () => setToast("error", "复制失败"),
+    );
   }
 
   return {
@@ -306,35 +513,14 @@ export function usePanelController(tabId: number) {
     addBlankRule,
     addPresetRule,
     loadPresetToDraft,
+    resetCurrentRule,
+    formatCurrentRuleJson,
     testEmitDraft,
+    createRuleFromSelectedLog,
+    sendManualEmit,
+    formatManualEmitDraft,
     exportRules,
     importRules,
-    sendManualEmit,
-    createRuleFromSelectedLog,
     copyText,
-    formatCurrentRuleJson() {
-      setState((current) => ({
-        ...current,
-        ruleDraft: current.ruleDraft ? formatDraftJson(current.ruleDraft) : null,
-      }));
-    },
-    resetCurrentRule() {
-      const original = state.snapshot?.rules.find(
-        (rule) => rule.id === state.selectedRuleId,
-      );
-      if (!original) {
-        return;
-      }
-      setState((current) => ({
-        ...current,
-        ruleDraft: createRuleDraft(original),
-      }));
-    },
-    formatManualEmitDraft() {
-      setState((current) => ({
-        ...current,
-        manualEmit: formatManualEmit(current.manualEmit),
-      }));
-    },
   };
 }

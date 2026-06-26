@@ -1,6 +1,7 @@
 import type { BridgeMockRule } from "../shared/ruleTypes";
+import type { BridgeSender, BridgeResponseOption } from "../shared/senderTypes";
 import { formatJson, safeParseJson } from "../shared/json";
-import type { ManualEmitDraft, RuleDraft } from "./types";
+import type { ManualEmitDraft, RuleDraft, SenderDraft, ResponseDraft } from "./types";
 
 export function createRuleDraft(rule: BridgeMockRule): RuleDraft {
   return {
@@ -12,6 +13,27 @@ export function createRuleDraft(rule: BridgeMockRule): RuleDraft {
     mode: rule.response.mode,
     eventName: rule.response.eventName,
     detailText: formatJson(rule.response.detail),
+  };
+}
+
+export function createSenderDraft(sender: BridgeSender): SenderDraft {
+  return {
+    id: sender.id,
+    name: sender.name,
+    enabled: sender.enabled,
+    matchEvent: sender.matchEvent,
+  };
+}
+
+export function createResponseDraft(senderId: string, response: BridgeResponseOption): ResponseDraft {
+  return {
+    senderId,
+    id: response.id,
+    name: response.name,
+    delayMs: response.delayMs,
+    mode: response.mode,
+    eventName: response.eventName,
+    detailText: formatJson(response.detail),
   };
 }
 

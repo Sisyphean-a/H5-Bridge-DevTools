@@ -1,5 +1,6 @@
 import type { BridgeLogItem, BridgePanelSnapshot } from "../shared/bridgeTypes";
-import type { BridgeMockRule, ImportStrategy } from "../shared/ruleTypes";
+import type { ImportStrategy } from "../shared/ruleTypes";
+import type { BridgeSender } from "../shared/senderTypes";
 
 export type PanelTabId = "rules" | "logs" | "manual" | "settings";
 
@@ -19,6 +20,23 @@ export interface RuleDraft {
   detailText: string;
 }
 
+export interface SenderDraft {
+  id: string;
+  name: string;
+  enabled: boolean;
+  matchEvent: string;
+}
+
+export interface ResponseDraft {
+  senderId: string;
+  id: string;
+  name: string;
+  delayMs: number;
+  mode: "dispatchEvent";
+  eventName: string;
+  detailText: string;
+}
+
 export interface ManualEmitDraft {
   eventName: string;
   detailText: string;
@@ -28,6 +46,10 @@ export interface AppViewState {
   snapshot: BridgePanelSnapshot | null;
   selectedRuleId: string | null;
   ruleDraft: RuleDraft | null;
+  selectedSenderId: string | null;
+  senderDraft: SenderDraft | null;
+  selectedResponse: { senderId: string; responseId: string } | null;
+  responseDraft: ResponseDraft | null;
   manualEmit: ManualEmitDraft;
   filterText: string;
   activeLogEvent: string | null;
@@ -47,22 +69,22 @@ export interface RuleEditorProps {
   onReset: () => void;
   onFormatJson: () => void;
   onTestEmit: () => void;
-  presets: BridgeMockRule[];
-  onLoadPreset: (rule: BridgeMockRule | null) => void;
+  presets: BridgeSender[];
+  onLoadPreset: (sender: BridgeSender | null) => void;
   onBack?: () => void;
 }
 
 export interface RulesListProps {
-  rules: BridgeMockRule[];
+  rules: BridgeSender[];
   selectedRuleId: string | null;
   filterText: string;
-  presetRules: BridgeMockRule[];
+  presetRules: BridgeSender[];
   enabledCount: number;
   onFilterChange: (value: string) => void;
-  onSelect: (ruleId: string) => void;
+  onSelect: (senderId: string) => void;
   onAddBlank: () => void;
   onAddFromPreset: (presetId: string) => void;
-  onToggle: (ruleId: string, enabled: boolean) => void;
+  onToggle: (senderId: string, enabled: boolean) => void;
 }
 
 export interface LogsPanelProps {

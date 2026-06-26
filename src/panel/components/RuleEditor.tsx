@@ -5,7 +5,6 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { presetRuleOptions } from "../../shared/presets";
 import { panelTheme } from "../designSystem";
 import type { RuleEditorProps } from "../types";
 
@@ -132,9 +131,9 @@ export function RuleEditor({
             style={fieldStyle}
           >
             <option value="">从模板填充</option>
-            {presetRuleOptions.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
+            {presets.map((preset) => (
+              <option key={preset.id} value={preset.id}>
+                {preset.name}
               </option>
             ))}
           </select>

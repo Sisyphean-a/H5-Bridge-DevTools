@@ -4,13 +4,11 @@ import type {
   OriginBridgeState,
 } from "./bridgeTypes";
 import { cloneJson } from "./json";
-import { getPresetRules } from "./presets";
-import type {
-  BridgeMockRule,
-  OriginBridgeSettings,
-  RuleExportPayload,
-} from "./ruleTypes";
-import { STORAGE_KEY } from "./constants";
+import { migrateStorageState, type LegacyStorageState } from "./migrate";
+import { getPresetSenders } from "./presets";
+import type { OriginBridgeSettings } from "./ruleTypes";
+import type { BridgeSender, SenderExportPayload } from "./senderTypes";
+import { LEGACY_STORAGE_KEY, STORAGE_KEY } from "./constants";
 
 export const DEFAULT_SETTINGS: OriginBridgeSettings = {
   autoMock: true,
@@ -21,7 +19,7 @@ export const DEFAULT_SETTINGS: OriginBridgeSettings = {
 
 export function createDefaultOriginState(): OriginBridgeState {
   return {
-    rules: getPresetRules(),
+    senders: getPresetSenders(),
     logs: [],
     settings: { ...DEFAULT_SETTINGS },
   };
@@ -30,7 +28,24 @@ export function createDefaultOriginState(): OriginBridgeState {
 export async function readStorageState(): Promise<BridgeStorageState> {
   const stored = await chrome.storage.local.get(STORAGE_KEY);
   const snapshot = stored[STORAGE_KEY] as BridgeStorageState | undefined;
-  return normalizeStorageState(snapshot);
+  if (snapshot) {
+    return normalizeStorageState(snapshot);
+  }
+
+  const migrated = await migrateLegacyState();
+  return normalizeStorageState(migrated);
+}
+
+async function migrateLegacyState(): Promise<BridgeStorageState | undefined> {
+  const legacyStored = await chrome.storage.local.get(LEGACY_STORAGE_KEY);
+  const legacy = legacyStored[LEGACY_STORAGE_KEY] as LegacyStorageState | undefined;
+  if (!legacy) {
+    return undefined;
+  }
+
+  const migrated = migrateStorageState(legacy);
+  await writeStorageState(migrated);
+  return migrated;
 }
 
 export async function writeStorageState(
@@ -66,7 +81,7 @@ export async function buildSnapshot(
     origin,
     href,
     globalEnabled: state.globalEnabled,
-    rules: cloneJson(originState.rules),
+    senders: cloneJson(originState.senders),
     logs: cloneJson(originState.logs),
     settings: { ...originState.settings },
   };
@@ -81,16 +96,16 @@ export async function updateStorageState(
   return nextState;
 }
 
-export function createRulesExport(
+export function createSendersExport(
   origin: string,
-  rules: BridgeMockRule[],
-): RuleExportPayload {
+  senders: BridgeSender[],
+): SenderExportPayload {
   return {
-    version: 1,
+    version: 2,
     name: "H5 桥接调试工具规则",
     origin,
     exportedAt: Date.now(),
-    rules: cloneJson(rules),
+    senders: cloneJson(senders),
   };
 }
 
@@ -117,7 +132,7 @@ function normalizeOrigins(
     Object.entries(origins).map(([origin, state]) => [
       origin,
       {
-        rules: cloneJson(state.rules ?? []),
+        senders: normalizeSenders(state.senders ?? []),
         logs: cloneJson(state.logs ?? []),
         settings: {
           ...DEFAULT_SETTINGS,
@@ -126,4 +141,16 @@ function normalizeOrigins(
       },
     ]),
   );
+}
+
+function normalizeSenders(senders: BridgeSender[]): BridgeSender[] {
+  return senders.map((sender) => {
+    const responses = cloneJson(sender.responses ?? []);
+    const activeResponseId = responses.some(
+      (response) => response.id === sender.activeResponseId,
+    )
+      ? sender.activeResponseId
+      : null;
+    return { ...sender, responses, activeResponseId };
+  });
 }

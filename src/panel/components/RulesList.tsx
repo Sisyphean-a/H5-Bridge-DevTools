@@ -119,7 +119,7 @@ export function RulesList({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {rule.match.event || "(空事件)"}
+                    {rule.matchEvent || "(空事件)"}
                   </div>
                 </div>
                 <div
@@ -130,9 +130,12 @@ export function RulesList({
                     flexShrink: 0,
                   }}
                 >
-                  {rule.response.delayMs > 0 ? (
-                    <span style={delayBadgeStyle}>{rule.response.delayMs}ms</span>
-                  ) : null}
+                  {(() => {
+                    const activeResponse = rule.responses.find((r) => r.id === rule.activeResponseId);
+                    return activeResponse && activeResponse.delayMs > 0 ? (
+                      <span style={delayBadgeStyle}>{activeResponse.delayMs}ms</span>
+                    ) : null;
+                  })()}
                   {(rule.meta?.hitCount ?? 0) > 0 ? (
                     <span style={countBadgeStyle}>{rule.meta?.hitCount ?? 0}</span>
                   ) : null}

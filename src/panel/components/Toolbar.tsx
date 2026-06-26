@@ -162,7 +162,7 @@ export function Toolbar({
               fontWeight: 600,
             }}
           >
-            {snapshot?.rules.length ?? 0}
+            {snapshot?.senders.length ?? 0}
           </span>
           <span style={{ fontSize: 11, color: panelTheme.textSecondary }}>
             条规则

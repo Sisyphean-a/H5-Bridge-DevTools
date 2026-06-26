@@ -1,63 +1,84 @@
 import type { BridgePanelSnapshot } from "../shared/bridgeTypes";
-import type { BridgeMockRule } from "../shared/ruleTypes";
-import type { AppViewState } from "./types";
-import { createRuleDraft } from "./utils";
+import type { AppViewState, ResponseDraft, SenderDraft } from "./types";
+import { createResponseDraft, createSenderDraft } from "./utils";
 
 export function syncSnapshotState(
   current: AppViewState,
   snapshot: BridgePanelSnapshot,
 ): AppViewState {
-  const selectedRule =
-    snapshot.rules.find((rule) => rule.id === current.selectedRuleId) ??
-    snapshot.rules[0] ??
-    null;
-  const hasUnsavedNewRule =
-    current.ruleDraft &&
-    !snapshot.rules.some((rule) => rule.id === current.ruleDraft?.id);
-  const shouldPreserveDraft =
-    Boolean(current.ruleDraft) &&
-    Boolean(selectedRule) &&
-    current.ruleDraft?.id === selectedRule?.id &&
-    !isDraftInSyncWithRule(current.ruleDraft, selectedRule);
+  const sender = syncSenderDraft(current, snapshot);
+  const response = syncResponseDraft(current, snapshot);
 
   return {
     ...current,
     snapshot,
-    selectedRuleId: hasUnsavedNewRule
-      ? current.ruleDraft?.id ?? null
-      : selectedRule?.id ?? null,
-    ruleDraft: hasUnsavedNewRule || shouldPreserveDraft
-      ? current.ruleDraft
-      : selectedRule
-        ? createRuleDraft(selectedRule)
-        : null,
+    selectedSenderId: sender.selectedSenderId,
+    senderDraft: sender.senderDraft,
+    selectedResponse: response.selectedResponse,
+    responseDraft: response.responseDraft,
   };
 }
 
-function isDraftInSyncWithRule(
-  draft: NonNullable<AppViewState["ruleDraft"]>,
-  rule: BridgeMockRule,
-): boolean {
-  const nextDraft = createRuleDraft(rule);
+function syncSenderDraft(
+  current: AppViewState,
+  snapshot: BridgePanelSnapshot,
+): Pick<AppViewState, "selectedSenderId" | "senderDraft"> {
+  const draft = current.senderDraft;
+  if (!draft) {
+    return { selectedSenderId: null, senderDraft: null };
+  }
+
+  const sender = snapshot.senders.find((item) => item.id === draft.id);
+  if (!sender) {
+    return { selectedSenderId: draft.id, senderDraft: draft };
+  }
+
+  const dirty = isSenderDraftDirty(draft, createSenderDraft(sender));
+  return {
+    selectedSenderId: sender.id,
+    senderDraft: dirty ? draft : createSenderDraft(sender),
+  };
+}
+
+function syncResponseDraft(
+  current: AppViewState,
+  snapshot: BridgePanelSnapshot,
+): Pick<AppViewState, "selectedResponse" | "responseDraft"> {
+  const draft = current.responseDraft;
+  const ref = current.selectedResponse;
+  if (!draft || !ref) {
+    return { selectedResponse: null, responseDraft: null };
+  }
+
+  const sender = snapshot.senders.find((item) => item.id === ref.senderId);
+  const response = sender?.responses.find((item) => item.id === ref.responseId);
+  if (!sender || !response) {
+    return { selectedResponse: ref, responseDraft: draft };
+  }
+
+  const dirty = isResponseDraftDirty(draft, createResponseDraft(sender.id, response));
+  return {
+    selectedResponse: ref,
+    responseDraft: dirty ? draft : createResponseDraft(sender.id, response),
+  };
+}
+
+function isSenderDraftDirty(draft: SenderDraft, fresh: SenderDraft): boolean {
   return (
-    draft.id === nextDraft.id &&
-    draft.name === nextDraft.name &&
-    draft.enabled === nextDraft.enabled &&
-    draft.matchEvent === nextDraft.matchEvent &&
-    draft.delayMs === nextDraft.delayMs &&
-    draft.mode === nextDraft.mode &&
-    draft.eventName === nextDraft.eventName &&
-    draft.detailText === nextDraft.detailText
+    draft.name !== fresh.name ||
+    draft.enabled !== fresh.enabled ||
+    draft.matchEvent !== fresh.matchEvent
   );
 }
 
-export function extractRulesFromImport(value: unknown): BridgeMockRule[] | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
-  const maybeRules = Reflect.get(value, "rules");
-  return Array.isArray(maybeRules) ? (maybeRules as BridgeMockRule[]) : null;
+function isResponseDraftDirty(draft: ResponseDraft, fresh: ResponseDraft): boolean {
+  return (
+    draft.name !== fresh.name ||
+    draft.delayMs !== fresh.delayMs ||
+    draft.mode !== fresh.mode ||
+    draft.eventName !== fresh.eventName ||
+    draft.detailText !== fresh.detailText
+  );
 }
 
 export function requestSnapshot(port: chrome.runtime.Port, tabId: number): void {

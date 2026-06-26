@@ -43,7 +43,7 @@ export async function initializeRuntime(
     href,
     globalEnabled: snapshot.globalEnabled,
     originState: {
-      rules: snapshot.rules,
+      senders: snapshot.senders,
       logs,
       settings: snapshot.settings,
     },
@@ -111,7 +111,7 @@ export function getSnapshot(runtime: ContentRuntime): BridgePanelSnapshot {
     origin: runtime.state.origin,
     href: runtime.state.href,
     globalEnabled: runtime.state.globalEnabled,
-    rules: cloneJson(runtime.state.originState.rules),
+    senders: cloneJson(runtime.state.originState.senders),
     logs: cloneJson(runtime.state.originState.logs),
     settings: { ...runtime.state.originState.settings },
   };

@@ -36,7 +36,7 @@ export function App({ tabId }: AppProps) {
   }, []);
 
   const enabledCount =
-    state.snapshot?.rules.filter((rule) => rule.enabled).length ?? 0;
+    state.snapshot?.senders.filter((sender) => sender.enabled).length ?? 0;
 
   const rulesContent = (
     <>
@@ -53,8 +53,8 @@ export function App({ tabId }: AppProps) {
           onSelect={selectRuleById}
           onAddBlank={controller.addBlankRule}
           onAddFromPreset={controller.addPresetRule}
-          onToggle={(ruleId, enabled) =>
-            postCommand({ type: "TOGGLE_RULE", ruleId, enabled })
+          onToggle={(senderId, enabled) =>
+            postCommand({ type: "TOGGLE_SENDER", senderId, enabled })
           }
         />
       </div>
@@ -201,8 +201,8 @@ export function App({ tabId }: AppProps) {
                 onSelect={selectRuleById}
                 onAddBlank={controller.addBlankRule}
                 onAddFromPreset={controller.addPresetRule}
-                onToggle={(ruleId, enabled) =>
-                  postCommand({ type: "TOGGLE_RULE", ruleId, enabled })
+                onToggle={(senderId, enabled) =>
+                  postCommand({ type: "TOGGLE_SENDER", senderId, enabled })
                 }
               />
             )}

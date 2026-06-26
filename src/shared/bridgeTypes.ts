@@ -1,4 +1,5 @@
-import type { BridgeMockRule, OriginBridgeSettings } from "./ruleTypes";
+import type { OriginBridgeSettings } from "./ruleTypes";
+import type { BridgeSender } from "./senderTypes";
 
 export type BridgeLogType = "SEND" | "MOCK" | "EMIT" | "WARN" | "ERROR";
 
@@ -19,7 +20,7 @@ export interface BridgeCallPayload {
 }
 
 export interface OriginBridgeState {
-  rules: BridgeMockRule[];
+  senders: BridgeSender[];
   logs: BridgeLogItem[];
   settings: OriginBridgeSettings;
 }
@@ -33,7 +34,7 @@ export interface BridgePanelSnapshot {
   origin: string;
   href: string;
   globalEnabled: boolean;
-  rules: BridgeMockRule[];
+  senders: BridgeSender[];
   logs: BridgeLogItem[];
   settings: OriginBridgeSettings;
 }
