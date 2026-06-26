@@ -67,7 +67,7 @@ const initialState: AppViewState = {
   toast: null,
   importStrategy: "merge",
   activeTab: "rules",
-  rulesSubTab: "senders",
+  rulesSubTab: "matches",
   narrowDetailOpen: false,
 };
 
@@ -190,37 +190,65 @@ function usePanelConnection(
   setState: Dispatch<SetStateAction<AppViewState>>,
 ): void {
   useEffect(() => {
-    const port = chrome.runtime.connect({ name: "h5-bridge-panel" });
-    portRef.current = port;
-    port.postMessage({ type: "PANEL_INIT", tabId });
+    let disposed = false;
+    let reconnectTimer: number | null = null;
 
-    const handleMessage = (message: BackgroundToPanelMessage) => {
-      if (message.type !== "BACKGROUND_EVENT") {
+    const connect = () => {
+      if (disposed) {
         return;
       }
 
-      const event = message.event;
-      if (event.type === "SNAPSHOT") {
-        setState((current) => syncSnapshotState(current, event.snapshot));
-        return;
-      }
+      const port = chrome.runtime.connect({ name: "h5-bridge-panel" });
+      portRef.current = port;
+      port.postMessage({ type: "PANEL_INIT", tabId });
 
-      setState((current) => ({
-        ...current,
-        toast: {
-          level: event.level,
-          message: event.message,
-        },
-      }));
+      const handleMessage = (message: BackgroundToPanelMessage) => {
+        if (message.type !== "BACKGROUND_EVENT") {
+          return;
+        }
+
+        const event = message.event;
+        if (event.type === "SNAPSHOT") {
+          setState((current) => syncSnapshotState(current, event.snapshot));
+          return;
+        }
+
+        setState((current) => ({
+          ...current,
+          toast: {
+            level: event.level,
+            message: event.message,
+          },
+        }));
+      };
+
+      const handleDisconnect = () => {
+        port.onMessage.removeListener(handleMessage);
+        port.onDisconnect.removeListener(handleDisconnect);
+        if (portRef.current === port) {
+          portRef.current = null;
+        }
+        if (disposed) {
+          return;
+        }
+        reconnectTimer = window.setTimeout(connect, 60);
+      };
+
+      port.onMessage.addListener(handleMessage);
+      port.onDisconnect.addListener(handleDisconnect);
+      requestSnapshot(port, tabId);
     };
 
-    port.onMessage.addListener(handleMessage);
-    requestSnapshot(port, tabId);
+    connect();
 
     return () => {
-      port.onMessage.removeListener(handleMessage);
-      port.disconnect();
+      disposed = true;
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+      }
+      const port = portRef.current;
       portRef.current = null;
+      port?.disconnect();
     };
   }, [tabId, portRef, setState]);
 }

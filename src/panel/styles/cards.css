@@ -21,7 +21,6 @@
 }
 
 .row-card__top,
-.match-card__header,
 .match-response {
   display: flex;
   align-items: center;
@@ -82,18 +81,73 @@
 }
 
 .match-card {
-  padding: 8px;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  padding: 6px 8px;
 }
 
-.match-card__header {
-  margin-bottom: 6px;
+.match-card__sender {
+  display: flex;
+  flex: 0 0 104px;
+  flex-direction: column;
+  justify-content: center;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  padding-right: 10px;
+  border-right: 1px solid var(--panel-border);
+}
+
+.match-card__sender-meta {
+  min-width: 0;
+  text-align: left;
+}
+
+.match-card__sender-action {
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.match-card__responses {
+  flex: 1;
+  min-width: 0;
+}
+
+.match-card__empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 34px;
+  padding-left: 8px;
 }
 
 .match-response {
-  padding: 6px 0;
+  padding: 6px 0 6px 8px;
   border-top: 1px solid var(--panel-border);
 }
 
 .match-response:first-of-type {
   border-top: none;
+}
+
+@media (max-width: 640px) {
+  .match-card {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .match-card__sender {
+    flex-basis: auto;
+    padding-right: 0;
+    padding-bottom: 6px;
+    border-right: none;
+    border-bottom: 1px solid var(--panel-border);
+  }
+
+  .match-card__empty,
+  .match-response {
+    padding-left: 0;
+  }
 }
