@@ -29,16 +29,16 @@ function createController(): PanelController {
 }
 
 describe("ResponsesView", () => {
-  it("默认显示文字模式，不直接铺开图片工具", () => {
+  it("默认同时显示 JSON 编辑区和图片字段插入工具", () => {
     const markup = renderToStaticMarkup(
       <ResponsesView controller={createController()} isWide={false} />,
     );
 
-    expect(markup).toContain("编辑模式");
-    expect(markup).toContain("文字模式");
-    expect(markup).toContain("图片模式");
     expect(markup).toContain("Detail JSON");
-    expect(markup).not.toContain("写入格式");
-    expect(markup).not.toContain("选择图片");
+    expect(markup).toContain("图片字段");
+    expect(markup).toContain("图片格式");
+    expect(markup).toContain("选择图片");
+    expect(markup).toContain("插入图片");
+    expect(markup).not.toContain("编辑模式");
   });
 });

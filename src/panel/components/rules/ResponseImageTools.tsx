@@ -86,17 +86,7 @@ export function ResponseImageTools({ controller }: { controller: PanelController
   return (
     <section className="workspace-section">
       <div className="form-grid">
-        <Field label="写入格式">
-          <select
-            className="control-select"
-            value={format}
-            onChange={(event) => setFormat(event.target.value as ImageValueFormat)}
-          >
-            <option value="androidUri">模拟 Android URI</option>
-            <option value="base64">Base64</option>
-          </select>
-        </Field>
-        <Field label="目标字段">
+        <Field label="图片字段">
           <input
             list={`image-field-${draft.id}`}
             className="control-field mono"
@@ -109,6 +99,16 @@ export function ResponseImageTools({ controller }: { controller: PanelController
             ))}
           </datalist>
         </Field>
+        <Field label="图片格式">
+          <select
+            className="control-select"
+            value={format}
+            onChange={(event) => setFormat(event.target.value as ImageValueFormat)}
+          >
+            <option value="androidUri">模拟 Android URI</option>
+            <option value="base64">Base64</option>
+          </select>
+        </Field>
         <Field label="选择图片" span2>
           <input
             type="file"
@@ -117,7 +117,7 @@ export function ResponseImageTools({ controller }: { controller: PanelController
             onChange={handleFileChange}
           />
         </Field>
-        <Field label="当前文件" span2>
+        <Field label="已选图片" span2>
           <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <Badge tone={selectedFile ? "green" : "gray"}>
               {selectedFile ? selectedFile.name : "未选择"}
@@ -153,7 +153,7 @@ export function ResponseImageTools({ controller }: { controller: PanelController
           onClick={() => void applyImage()}
           disabled={!selectedFile || applying}
         >
-          {applying ? "写入中..." : "写入当前格式"}
+          {applying ? "插入中..." : "插入图片"}
         </button>
       </div>
     </section>

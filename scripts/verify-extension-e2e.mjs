@@ -250,20 +250,21 @@ async function saveResponse(panelPage) {
 }
 
 async function readResponseJson(panelPage) {
-  await selectEditorMode(panelPage, "text");
   return await panelPage.locator("textarea").inputValue();
 }
 
 async function writeImageWithTool(panelPage, fixturePath, format, fieldPath) {
-  await selectEditorMode(panelPage, "image");
+  await panelPage.waitForFunction(
+    () => document.body.textContent?.includes("图片格式") ?? false,
+  );
   await panelPage
     .locator("label.form-field")
-    .filter({ hasText: "写入格式" })
+    .filter({ hasText: "图片格式" })
     .locator("select")
     .selectOption(format);
   await panelPage
     .locator("label.form-field")
-    .filter({ hasText: "目标字段" })
+    .filter({ hasText: "图片字段" })
     .locator('input[list^="image-field-"]')
     .fill(fieldPath);
   await panelPage
@@ -271,20 +272,12 @@ async function writeImageWithTool(panelPage, fixturePath, format, fieldPath) {
     .filter({ hasText: "选择图片" })
     .locator('input[type="file"]')
     .setInputFiles(fixturePath);
-  await panelPage.getByText("写入当前格式", { exact: true }).click();
+  await panelPage.getByText("插入图片", { exact: true }).click();
   await panelPage.waitForFunction(
     (expectedText) =>
       document.body.textContent?.includes(expectedText) ?? false,
     `已写入${format === "base64" ? "Base64" : "模拟 Android URI"}`,
   );
-}
-
-async function selectEditorMode(panelPage, mode) {
-  await panelPage
-    .locator("label.form-field")
-    .filter({ hasText: "编辑模式" })
-    .locator("select")
-    .selectOption(mode);
 }
 
 async function triggerBridgeCall(page) {
