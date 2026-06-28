@@ -64,9 +64,26 @@ describe("shared rules behavior", () => {
 
     expect(merged).toHaveLength(1);
     expect(merged[0].activeResponseId).toBeNull();
+    expect(merged[0].lastActiveResponseId).toBe(merged[0].responses[0]?.id ?? null);
     expect(merged[0].matchEvent).toBe("camera");
     expect(merged[0].id).not.toBe(imported.id);
     expect(merged[0].responses[0]?.id).not.toBe(imported.responses[0]?.id);
+  });
+
+  it("normalizeSenders 会保留未配对 sender 的上次活跃响应", () => {
+    const response = createResponse("resp-1");
+    const normalized = normalizeSenders([
+      createSender("sender-a", {
+        responses: [response],
+        activeResponseId: null,
+        lastActiveResponseId: response.id,
+      }),
+    ]);
+
+    expect(normalized[0]).toMatchObject({
+      activeResponseId: null,
+      lastActiveResponseId: response.id,
+    });
   });
 
   it("findMatchingSender 会跳过未关联活跃响应的 sender", () => {

@@ -3,7 +3,9 @@ import {
   duplicateSender,
   findEquivalentResponseIndex,
   mergeImportedSenders,
+  normalizeResponseSelection,
   normalizeSenders,
+  selectSenderResponse,
 } from "../shared/rules";
 import type { ImportStrategy } from "../shared/ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
@@ -56,15 +58,9 @@ export function setActiveResponseState(
       if (sender.id !== senderId) {
         return sender;
       }
-      const nextActiveId =
-        responseId === null
-          ? null
-          : sender.responses.some((response) => response.id === responseId)
-            ? responseId
-            : sender.activeResponseId;
       return {
         ...sender,
-        activeResponseId: nextActiveId,
+        ...selectSenderResponse(sender, responseId),
         meta: { ...sender.meta, updatedAt: now },
       };
     }),
@@ -99,10 +95,18 @@ export function upsertResponseState(
               itemIndex === index ? nextResponse : item,
             )
           : [...sender.responses, nextResponse];
+      const nextSelection =
+        index < 0 && wasEmpty
+          ? normalizeResponseSelection(responses, nextResponse.id, nextResponse.id)
+          : normalizeResponseSelection(
+              responses,
+              sender.activeResponseId,
+              sender.lastActiveResponseId,
+            );
       return {
         ...sender,
         responses,
-        activeResponseId: index < 0 && wasEmpty ? nextResponse.id : sender.activeResponseId,
+        ...nextSelection,
       };
     }),
   );
@@ -119,13 +123,19 @@ export function deleteResponseState(
         return sender;
       }
       const responses = sender.responses.filter((item) => item.id !== responseId);
+      const fallbackResponseId =
+        sender.activeResponseId === responseId || sender.lastActiveResponseId === responseId
+          ? (responses[0]?.id ?? null)
+          : null;
       return {
         ...sender,
         responses,
-        activeResponseId:
-          sender.activeResponseId === responseId
-            ? (responses[0]?.id ?? null)
-            : sender.activeResponseId,
+        ...normalizeResponseSelection(
+          responses,
+          sender.activeResponseId === responseId ? fallbackResponseId : sender.activeResponseId,
+          sender.lastActiveResponseId === responseId ? null : sender.lastActiveResponseId,
+          fallbackResponseId,
+        ),
       };
     }),
   );

@@ -34,6 +34,10 @@ export function createSender(
     overrides.activeResponseId === undefined
       ? (responses[0]?.id ?? null)
       : overrides.activeResponseId;
+  const lastActiveResponseId =
+    overrides.lastActiveResponseId === undefined
+      ? activeResponseId
+      : overrides.lastActiveResponseId;
 
   const base: BridgeSender = {
     id,
@@ -41,6 +45,7 @@ export function createSender(
     matchEvent: `event-${id}`,
     responses,
     activeResponseId,
+    lastActiveResponseId,
     meta: { createdAt: 1, updatedAt: 1, hitCount: 0 },
   };
 
@@ -49,6 +54,7 @@ export function createSender(
     ...overrides,
     responses,
     activeResponseId,
+    lastActiveResponseId,
   };
 }
 

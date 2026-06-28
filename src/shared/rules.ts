@@ -5,7 +5,10 @@ import { createBlankSender } from "./presets";
 import type { ImportStrategy } from "./ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
 
-type LegacyBridgeSender = BridgeSender & { enabled?: boolean };
+type LegacyBridgeSender = BridgeSender & {
+  enabled?: boolean;
+  lastActiveResponseId?: string | null;
+};
 
 export function findMatchingSender(
   senders: BridgeSender[],
@@ -19,10 +22,55 @@ export function findMatchingSender(
 export function getActiveResponse(
   sender: BridgeSender,
 ): BridgeResponseOption | undefined {
-  if (!sender.activeResponseId) {
+  const activeResponseId = getValidResponseId(sender.responses, sender.activeResponseId);
+  if (!activeResponseId) {
     return undefined;
   }
-  return sender.responses.find((response) => response.id === sender.activeResponseId);
+  return sender.responses.find((response) => response.id === activeResponseId);
+}
+
+export function getRestorableResponseId(sender: BridgeSender): string | null {
+  return (
+    getValidResponseId(sender.responses, sender.activeResponseId) ??
+    getValidResponseId(sender.responses, sender.lastActiveResponseId)
+  );
+}
+
+export function normalizeResponseSelection(
+  responses: BridgeResponseOption[],
+  activeResponseId: string | null,
+  lastActiveResponseId: string | null,
+  fallbackResponseId: string | null = null,
+): Pick<BridgeSender, "activeResponseId" | "lastActiveResponseId"> {
+  const nextActiveResponseId = getValidResponseId(responses, activeResponseId);
+  if (nextActiveResponseId) {
+    return {
+      activeResponseId: nextActiveResponseId,
+      lastActiveResponseId: nextActiveResponseId,
+    };
+  }
+  return {
+    activeResponseId: null,
+    lastActiveResponseId:
+      getValidResponseId(responses, lastActiveResponseId) ??
+      getValidResponseId(responses, fallbackResponseId),
+  };
+}
+
+export function selectSenderResponse(
+  sender: BridgeSender,
+  responseId: string | null,
+): Pick<BridgeSender, "activeResponseId" | "lastActiveResponseId"> {
+  const nextActiveResponseId =
+    responseId === null
+      ? null
+      : getValidResponseId(sender.responses, responseId) ??
+        getValidResponseId(sender.responses, sender.activeResponseId);
+
+  return {
+    activeResponseId: nextActiveResponseId,
+    lastActiveResponseId: nextActiveResponseId ?? getRestorableResponseId(sender),
+  };
 }
 
 function cloneSenderWithNewIds(sender: BridgeSender): BridgeSender {
@@ -39,6 +87,9 @@ function cloneSenderWithNewIds(sender: BridgeSender): BridgeSender {
     activeResponseId: sender.activeResponseId
       ? idMap.get(sender.activeResponseId) ?? null
       : null,
+    lastActiveResponseId: sender.lastActiveResponseId
+      ? idMap.get(sender.lastActiveResponseId) ?? null
+      : null,
   };
 }
 
@@ -51,6 +102,7 @@ export function duplicateSender(sender: BridgeSender): BridgeSender {
     name: `${sender.name} 副本`,
     matchEvent: "",
     activeResponseId: cloned.responses[0]?.id ?? null,
+    lastActiveResponseId: cloned.responses[0]?.id ?? null,
     meta: { createdAt: now, updatedAt: now, hitCount: 0 },
   };
 }
@@ -100,6 +152,7 @@ export function createSenderFromLog(log: BridgeLogItem): BridgeSender {
     matchEvent: eventName,
     responses: [response],
     activeResponseId: response.id,
+    lastActiveResponseId: response.id,
   };
 }
 
@@ -165,10 +218,22 @@ function normalizeImportedSender(
 ): BridgeSender {
   const now = Date.now();
   const cloned = normalizeSenderShape(cloneSenderWithNewIds(sender));
+  const nextSelection = clearActiveResponse
+    ? normalizeResponseSelection(
+        cloned.responses,
+        null,
+        cloned.lastActiveResponseId,
+        cloned.responses[0]?.id ?? null,
+      )
+    : normalizeResponseSelection(
+        cloned.responses,
+        cloned.activeResponseId,
+        cloned.lastActiveResponseId,
+      );
   return {
     ...cloned,
     id: createId("sender"),
-    activeResponseId: clearActiveResponse ? null : cloned.activeResponseId,
+    ...nextSelection,
     meta: { createdAt: now, updatedAt: now, hitCount: 0 },
   };
 }
@@ -177,19 +242,18 @@ function normalizeSenderShape(sender: BridgeSender): BridgeSender {
   const cloned = cloneJson(sender) as LegacyBridgeSender;
   const responses = dedupeResponsesByIdentity(cloned.responses ?? []);
   const legacyEnabled = cloned.enabled ?? true;
-  const activeResponseId =
-    legacyEnabled &&
-    cloned.activeResponseId &&
-    responses.some((response) => response.id === cloned.activeResponseId)
-      ? cloned.activeResponseId
-      : null;
+  const nextSelection = normalizeResponseSelection(
+    responses,
+    legacyEnabled ? cloned.activeResponseId : null,
+    cloned.lastActiveResponseId ?? cloned.activeResponseId,
+  );
 
   return {
     id: cloned.id,
     name: cloned.name.trim(),
     matchEvent: cloned.matchEvent.trim(),
     responses,
-    activeResponseId,
+    ...nextSelection,
     meta: cloned.meta,
   };
 }
@@ -220,11 +284,16 @@ function dedupeResponsesByIdentity(
 
 function mergeSenderPair(base: BridgeSender, incoming: BridgeSender): BridgeSender {
   const responses = dedupeResponsesByIdentity([...base.responses, ...incoming.responses]);
+  const nextSelection = normalizeResponseSelection(
+    responses,
+    pickActiveResponseId(base, incoming, responses),
+    pickLastActiveResponseId(base, incoming, responses),
+  );
   return {
     ...base,
     name: mergeSenderName(base, incoming),
     responses,
-    activeResponseId: pickActiveResponseId(base, incoming, responses),
+    ...nextSelection,
     meta: {
       createdAt: pickCreatedAt(base.meta?.createdAt, incoming.meta?.createdAt),
       updatedAt: Math.max(base.meta?.updatedAt ?? 0, incoming.meta?.updatedAt ?? 0) || undefined,
@@ -283,6 +352,27 @@ function pickActiveResponseId(
   return null;
 }
 
+function pickLastActiveResponseId(
+  base: BridgeSender,
+  incoming: BridgeSender,
+  responses: BridgeResponseOption[],
+): string | null {
+  const responseIds = new Set(responses.map((response) => response.id));
+  const candidates = [
+    base.lastActiveResponseId,
+    incoming.lastActiveResponseId,
+    base.activeResponseId,
+    incoming.activeResponseId,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && responseIds.has(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function pickCreatedAt(
   left?: number,
   right?: number,
@@ -304,4 +394,13 @@ function createResponseSignature(response: BridgeResponseOption): string {
     response.eventName.trim(),
     response.detail,
   ]);
+}
+
+function getValidResponseId(
+  responses: BridgeResponseOption[],
+  responseId: string | null,
+): string | null {
+  return responseId && responses.some((response) => response.id === responseId)
+    ? responseId
+    : null;
 }

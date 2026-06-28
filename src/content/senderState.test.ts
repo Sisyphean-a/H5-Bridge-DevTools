@@ -41,7 +41,26 @@ describe("content sender state", () => {
     const result = setActiveResponseState([sender], sender.id, "missing", 400);
 
     expect(result[0]?.activeResponseId).toBe(first.id);
+    expect(result[0]?.lastActiveResponseId).toBe(first.id);
     expect(result[0]?.meta?.updatedAt).toBe(400);
+  });
+
+  it("setActiveResponseState 关闭后会保留上次活跃响应并支持恢复", () => {
+    const first = createResponse("resp-1");
+    const second = createResponse("resp-2");
+    const sender = createSender("sender-1", {
+      responses: [first, second],
+      activeResponseId: second.id,
+      lastActiveResponseId: second.id,
+    });
+
+    const closed = setActiveResponseState([sender], sender.id, null, 500);
+    const restored = setActiveResponseState(closed, sender.id, second.id, 600);
+
+    expect(closed[0]?.activeResponseId).toBeNull();
+    expect(closed[0]?.lastActiveResponseId).toBe(second.id);
+    expect(restored[0]?.activeResponseId).toBe(second.id);
+    expect(restored[0]?.lastActiveResponseId).toBe(second.id);
   });
 
   it("upsertResponseState 会给空 sender 自动激活首个响应", () => {
@@ -57,6 +76,7 @@ describe("content sender state", () => {
 
     expect(result[0]?.responses).toHaveLength(1);
     expect(result[0]?.activeResponseId).toBe(response.id);
+    expect(result[0]?.lastActiveResponseId).toBe(response.id);
     expect(result[0]?.responses[0]).toMatchObject({
       id: response.id,
       meta: { createdAt: 500, updatedAt: 500, hitCount: 2 },
@@ -75,6 +95,7 @@ describe("content sender state", () => {
 
     expect(result[0]?.responses.map((item) => item.id)).toEqual([second.id]);
     expect(result[0]?.activeResponseId).toBe(second.id);
+    expect(result[0]?.lastActiveResponseId).toBe(second.id);
   });
 
   it("updateHitCountState 会同时增加 sender 和 response 的命中次数", () => {

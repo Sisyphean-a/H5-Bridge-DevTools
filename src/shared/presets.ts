@@ -160,6 +160,7 @@ function instantiateSender(seed: PresetSenderSeed): BridgeSender {
     matchEvent: seed.matchEvent,
     responses,
     activeResponseId: responses[0]?.id ?? null,
+    lastActiveResponseId: responses[0]?.id ?? null,
     meta: { createdAt: now, updatedAt: now, hitCount: 0 },
   };
 }
@@ -195,6 +196,7 @@ export function createBlankSender(): BridgeSender {
     matchEvent: "",
     responses: [response],
     activeResponseId: response.id,
+    lastActiveResponseId: response.id,
     meta: { createdAt: now, updatedAt: now, hitCount: 0 },
   };
 }

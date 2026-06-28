@@ -2,7 +2,12 @@ import type { BridgeLogItem, BridgeLogType, BridgePanelSnapshot } from "../share
 import { cloneJson } from "../shared/json";
 import type { PanelCommand } from "../shared/messageTypes";
 import { createBlankSender, getPresetSenders } from "../shared/presets";
-import { duplicateSender, mergeImportedSenders } from "../shared/rules";
+import {
+  duplicateSender,
+  mergeImportedSenders,
+  normalizeResponseSelection,
+  selectSenderResponse,
+} from "../shared/rules";
 import type { OriginBridgeSettings } from "../shared/ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
 
@@ -20,6 +25,7 @@ export function createPreviewSnapshot(): BridgePanelSnapshot {
   extraSender.matchEvent = "getUserInfo";
   extraSender.responses = [];
   extraSender.activeResponseId = null;
+  extraSender.lastActiveResponseId = null;
 
   return {
     origin: "https://preview.local",
@@ -55,11 +61,7 @@ export function applyPreviewCommand(
           sender.id === command.senderId
             ? {
                 ...sender,
-                activeResponseId:
-                  command.responseId === null ||
-                  sender.responses.some((response) => response.id === command.responseId)
-                    ? command.responseId
-                    : sender.activeResponseId,
+                ...selectSenderResponse(sender, command.responseId),
               }
             : sender,
         ),
@@ -69,12 +71,7 @@ export function applyPreviewCommand(
         ...snapshot,
         senders: snapshot.senders.map((sender) =>
           sender.id === command.senderId
-            ? {
-                ...sender,
-                responses: upsertResponse(sender.responses, command.response),
-                activeResponseId:
-                  sender.activeResponseId ?? sender.responses[0]?.id ?? command.response.id,
-              }
+            ? applyPreviewResponseUpsert(sender, command.response)
             : sender,
         ),
       };
@@ -86,13 +83,24 @@ export function applyPreviewCommand(
             return sender;
           }
           const responses = sender.responses.filter((response) => response.id !== command.responseId);
+          const fallbackResponseId =
+            sender.activeResponseId === command.responseId ||
+            sender.lastActiveResponseId === command.responseId
+              ? (responses[0]?.id ?? null)
+              : null;
           return {
             ...sender,
             responses,
-            activeResponseId:
+            ...normalizeResponseSelection(
+              responses,
               sender.activeResponseId === command.responseId
-                ? (responses[0]?.id ?? null)
+                ? fallbackResponseId
                 : sender.activeResponseId,
+              sender.lastActiveResponseId === command.responseId
+                ? null
+                : sender.lastActiveResponseId,
+              fallbackResponseId,
+            ),
           };
         }),
       };
@@ -168,6 +176,26 @@ function upsertResponse(
   return index >= 0
     ? responses.map((item, itemIndex) => (itemIndex === index ? cloneJson(response) : item))
     : [...responses, cloneJson(response)];
+}
+
+function applyPreviewResponseUpsert(
+  sender: BridgeSender,
+  response: BridgeResponseOption,
+): BridgeSender {
+  const responses = upsertResponse(sender.responses, response);
+  const nextSelection =
+    sender.responses.length === 0
+      ? normalizeResponseSelection(responses, response.id, response.id)
+      : normalizeResponseSelection(
+          responses,
+          sender.activeResponseId,
+          sender.lastActiveResponseId,
+        );
+  return {
+    ...sender,
+    responses,
+    ...nextSelection,
+  };
 }
 
 function createPreviewLogs(): BridgeLogItem[] {

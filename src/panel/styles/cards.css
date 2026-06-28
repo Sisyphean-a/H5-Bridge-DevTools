@@ -93,20 +93,56 @@
   flex-direction: column;
   justify-content: center;
   align-items: stretch;
-  gap: 6px;
   min-width: 0;
-  padding-right: 10px;
-  border-right: 1px solid var(--panel-border);
+  padding: 8px 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 2px;
+  background: var(--panel-surface);
+  color: var(--panel-text);
+  font: inherit;
+  text-align: left;
+  transition: border-color 0.12s ease, background-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.match-card__sender[aria-disabled="true"] {
+  cursor: default;
+}
+
+.match-card__sender.is-active {
+  border-color: var(--panel-green);
+  background: var(--panel-green-bg);
+  cursor: pointer;
+}
+
+.match-card__sender.is-restorable {
+  cursor: pointer;
+}
+
+.match-card__sender.is-active:hover {
+  box-shadow: inset 0 0 0 999px rgba(24, 128, 56, 0.04);
+}
+
+.match-card__sender.is-restorable:hover {
+  background: var(--panel-surface-alt);
+}
+
+.match-card__sender.is-active:active {
+  box-shadow: inset 0 0 0 999px rgba(24, 128, 56, 0.08);
+}
+
+.match-card__sender.is-restorable:active {
+  box-shadow: inset 0 0 0 999px rgba(95, 99, 104, 0.06);
+}
+
+.match-card__sender.is-active:focus-visible,
+.match-card__sender.is-restorable:focus-visible {
+  outline: 2px solid rgba(26, 115, 232, 0.28);
+  outline-offset: 1px;
 }
 
 .match-card__sender-meta {
   min-width: 0;
   text-align: left;
-}
-
-.match-card__sender-action {
-  align-self: flex-start;
-  margin-top: 2px;
 }
 
 .match-card__responses {
@@ -140,10 +176,6 @@
 
   .match-card__sender {
     flex-basis: auto;
-    padding-right: 0;
-    padding-bottom: 6px;
-    border-right: none;
-    border-bottom: 1px solid var(--panel-border);
   }
 
   .match-card__empty,

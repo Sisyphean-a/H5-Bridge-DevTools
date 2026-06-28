@@ -6,7 +6,10 @@ import type {
 import { cloneJson } from "./json";
 import { migrateStorageState, type LegacyStorageState } from "./migrate";
 import { getPresetSenders } from "./presets";
-import { normalizeSenders as normalizeSenderCollection } from "./rules";
+import {
+  normalizeResponseSelection,
+  normalizeSenders as normalizeSenderCollection,
+} from "./rules";
 import type { OriginBridgeSettings } from "./ruleTypes";
 import type { BridgeSender, SenderExportPayload } from "./senderTypes";
 import { LEGACY_STORAGE_KEY, STORAGE_KEY } from "./constants";
@@ -148,20 +151,22 @@ function normalizeSenders(senders: BridgeSender[]): BridgeSender[] {
   return normalizeSenderCollection(
     senders.map((sender) => {
       const responses = cloneJson(sender.responses ?? []);
-      const legacyEnabled = (sender as BridgeSender & { enabled?: boolean }).enabled ?? true;
-      const activeResponseId = responses.some(
-        (response) => response.id === sender.activeResponseId,
-      )
-        ? legacyEnabled
-          ? sender.activeResponseId
-          : null
-        : null;
+      const legacySender = sender as BridgeSender & {
+        enabled?: boolean;
+        lastActiveResponseId?: string | null;
+      };
+      const legacyEnabled = legacySender.enabled ?? true;
+      const nextSelection = normalizeResponseSelection(
+        responses,
+        legacyEnabled ? sender.activeResponseId : null,
+        legacySender.lastActiveResponseId ?? sender.activeResponseId,
+      );
       return {
         id: sender.id,
         name: sender.name,
         matchEvent: sender.matchEvent,
         responses,
-        activeResponseId,
+        ...nextSelection,
         meta: sender.meta,
       };
     }),

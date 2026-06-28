@@ -33,6 +33,7 @@ export function migrateRuleToSender(rule: BridgeMockRule): BridgeSender {
     matchEvent: rule.match.event,
     responses: [response],
     activeResponseId: rule.enabled ? response.id : null,
+    lastActiveResponseId: response.id,
     meta: { ...rule.meta },
   };
 }

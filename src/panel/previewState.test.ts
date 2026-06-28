@@ -29,6 +29,7 @@ describe("preview state", () => {
 
     expect(next.senders[0]?.responses.map((item) => item.id)).toEqual([response.id]);
     expect(next.senders[0]?.activeResponseId).toBe(response.id);
+    expect(next.senders[0]?.lastActiveResponseId).toBe(response.id);
   });
 
   it("DELETE_RESPONSE 删除当前激活项后会切到剩余第一条", () => {
@@ -50,6 +51,37 @@ describe("preview state", () => {
 
     expect(next.senders[0]?.responses.map((item) => item.id)).toEqual([second.id]);
     expect(next.senders[0]?.activeResponseId).toBe(second.id);
+    expect(next.senders[0]?.lastActiveResponseId).toBe(second.id);
+  });
+
+  it("SET_ACTIVE_RESPONSE 关闭后再次设置同一响应会恢复上次选择", () => {
+    const first = createResponse("resp-1");
+    const second = createResponse("resp-2");
+    const sender = createSender("sender-1", {
+      responses: [first, second],
+      activeResponseId: second.id,
+      lastActiveResponseId: second.id,
+    });
+
+    const closed = applyPreviewCommand(
+      { ...createPreviewSnapshot(), senders: [sender], logs: [] },
+      {
+        type: "SET_ACTIVE_RESPONSE",
+        senderId: sender.id,
+        responseId: null,
+      },
+    );
+
+    const restored = applyPreviewCommand(closed, {
+      type: "SET_ACTIVE_RESPONSE",
+      senderId: sender.id,
+      responseId: second.id,
+    });
+
+    expect(closed.senders[0]?.activeResponseId).toBeNull();
+    expect(closed.senders[0]?.lastActiveResponseId).toBe(second.id);
+    expect(restored.senders[0]?.activeResponseId).toBe(second.id);
+    expect(restored.senders[0]?.lastActiveResponseId).toBe(second.id);
   });
 
   it("TRIGGER_RESPONSE 会派发事件并追加 EMIT 日志", () => {

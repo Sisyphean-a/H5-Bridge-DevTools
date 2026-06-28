@@ -24,7 +24,7 @@ async function applyScenario(scenario: string): Promise<void> {
       break;
     case "match-close":
       await clickText(".subtab-button", "匹配");
-      await clickText(".control-button", "关闭配对");
+      await clickText(".match-card__sender.is-active", "登录");
       break;
   }
 }

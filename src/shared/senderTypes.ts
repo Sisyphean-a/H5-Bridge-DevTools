@@ -22,6 +22,7 @@ export interface BridgeSender {
   matchEvent: string;
   responses: BridgeResponseOption[];
   activeResponseId: string | null;
+  lastActiveResponseId: string | null;
   meta?: BridgeResponseMeta;
 }
 
