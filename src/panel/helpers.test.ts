@@ -63,11 +63,58 @@ describe("syncSnapshotState", () => {
 
     const next = syncSnapshotState(current, nextSnapshot);
 
-    expect(next.senderDraft).toEqual(createSenderDraft(sender));
+    expect(next.senderDraft).toEqual(createSenderDraft(nextSnapshot.senders[0]));
     expect(next.selectedSenderId).toBe(sender.id);
+    expect(next.toast).toBeNull();
   });
 
-  it("在响应仍存在时会保留本地已修改的 responseDraft", () => {
+  it("本地已修改 senderDraft 时会保留草稿并提示远端更新", () => {
+    const sender = createSender("sender-1", { name: "旧名称" });
+    const current = {
+      ...createViewState({ senders: [sender] }),
+      selectedSenderId: sender.id,
+      senderDraft: { ...createSenderDraft(sender), name: "本地修改名称" },
+    };
+
+    const nextSnapshot = createSnapshot({
+      senders: [{ ...sender, name: "远端新名称", matchEvent: "updated-event" }],
+    });
+
+    const next = syncSnapshotState(current, nextSnapshot);
+
+    expect(next.senderDraft?.name).toBe("本地修改名称");
+    expect(next.toast).toEqual({
+      level: "info",
+      message: "已收到远端发送更新，当前保留本地未保存草稿。",
+    });
+  });
+
+  it("未修改的 responseDraft 会跟随远端快照刷新", () => {
+    const response = createResponse("resp-1", { name: "旧响应" });
+    const sender = createSender("sender-1", { responses: [response], activeResponseId: response.id });
+    const current = {
+      ...createViewState({ senders: [sender] }),
+      selectedResponse: { senderId: sender.id, responseId: response.id },
+      responseDraft: createResponseDraft(sender.id, response),
+    };
+
+    const next = syncSnapshotState(
+      current,
+      createSnapshot({
+        senders: [
+          createSender(sender.id, {
+            ...sender,
+            responses: [{ ...response, name: "远端响应更新" }],
+          }),
+        ],
+      }),
+    );
+
+    expect(next.responseDraft?.name).toBe("远端响应更新");
+    expect(next.toast).toBeNull();
+  });
+
+  it("在响应仍存在时会保留本地已修改的 responseDraft 并提示远端更新", () => {
     const response = createResponse("resp-1", { name: "旧响应" });
     const sender = createSender("sender-1", { responses: [response], activeResponseId: response.id });
     const current = {
@@ -90,6 +137,10 @@ describe("syncSnapshotState", () => {
 
     expect(next.responseDraft?.name).toBe("本地响应修改");
     expect(next.selectedResponse).toEqual({ senderId: sender.id, responseId: response.id });
+    expect(next.toast).toEqual({
+      level: "info",
+      message: "已收到远端响应更新，当前保留本地未保存草稿。",
+    });
   });
 });
 

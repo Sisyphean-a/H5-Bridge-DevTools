@@ -19,6 +19,7 @@ import {
   postContentMessage,
   publishSnapshot,
   readEventName,
+  syncRuntimeFromStorageChange,
   type ContentRuntime,
   syncSettingsToPage,
   trimLogs,
@@ -50,16 +51,24 @@ export function bootstrapContentScript(): void {
     }
     void runtime.ready.then(() => handlePageMessage(event));
   };
+  const handleStorageChange = (
+    changes: Record<string, chrome.storage.StorageChange>,
+    areaName: string,
+  ) => {
+    void runtime.ready.then(() => syncRuntimeFromStorageChange(runtime, changes, areaName));
+  };
 
   runtime.ready = initialize().then((snapshot) => {
     postContentMessage(runtime, { type: "CONTENT_READY", snapshot });
   });
 
   runtime.port.onMessage.addListener(handlePortMessage);
+  chrome.storage.onChanged.addListener(handleStorageChange);
   window.addEventListener("message", handleWindowMessage);
 
   runtime.port.onDisconnect.addListener(() => {
     runtime.port.onMessage.removeListener(handlePortMessage);
+    chrome.storage.onChanged.removeListener(handleStorageChange);
     window.removeEventListener("message", handleWindowMessage);
   });
 }

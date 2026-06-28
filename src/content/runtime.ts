@@ -4,7 +4,7 @@ import type {
   BridgeStorageState,
   OriginBridgeState,
 } from "../shared/bridgeTypes";
-import { SOURCE_EXTENSION } from "../shared/constants";
+import { SOURCE_EXTENSION, STORAGE_KEY } from "../shared/constants";
 import { createId } from "../shared/id";
 import type {
   ContentEvent,
@@ -36,23 +36,25 @@ export async function initializeRuntime(
   const href = window.location.href;
   const origin = window.location.origin;
   const snapshot = await buildSnapshot(origin, href);
-  const logs = snapshot.settings.preserveLogs ? snapshot.logs : [];
-
-  runtime.state = {
-    origin,
-    href,
-    globalEnabled: snapshot.globalEnabled,
-    originState: {
-      senders: snapshot.senders,
-      logs,
-      settings: snapshot.settings,
-    },
-  };
+  setRuntimeSnapshot(runtime, snapshot, snapshot.settings.preserveLogs);
 
   if (!snapshot.settings.preserveLogs && snapshot.logs.length > 0) {
     await persistRuntime(runtime);
   }
 
+  syncSettingsToPage(runtime);
+  return getSnapshot(runtime);
+}
+
+export async function reloadRuntimeSnapshot(
+  runtime: ContentRuntime,
+): Promise<BridgePanelSnapshot> {
+  if (!runtime.state) {
+    throw new Error("Runtime state is not initialized.");
+  }
+
+  const snapshot = await buildSnapshot(runtime.state.origin, runtime.state.href);
+  setRuntimeSnapshot(runtime, snapshot, true);
   syncSettingsToPage(runtime);
   return getSnapshot(runtime);
 }
@@ -117,8 +119,42 @@ export function getSnapshot(runtime: ContentRuntime): BridgePanelSnapshot {
   };
 }
 
+export function setRuntimeSnapshot(
+  runtime: ContentRuntime,
+  snapshot: BridgePanelSnapshot,
+  includeLogs: boolean,
+): void {
+  runtime.state = {
+    origin: snapshot.origin,
+    href: snapshot.href,
+    globalEnabled: snapshot.globalEnabled,
+    originState: {
+      senders: cloneJson(snapshot.senders),
+      logs: includeLogs ? cloneJson(snapshot.logs) : [],
+      settings: { ...snapshot.settings },
+    },
+  };
+}
+
 export function publishSnapshot(runtime: ContentRuntime): void {
   postContentEvent(runtime, { type: "SNAPSHOT", snapshot: getSnapshot(runtime) });
+}
+
+export async function syncRuntimeFromStorageChange(
+  runtime: ContentRuntime,
+  changes: Record<string, chrome.storage.StorageChange>,
+  areaName: string,
+): Promise<boolean> {
+  if (!runtime.portConnected || areaName !== "local" || !changes[STORAGE_KEY]) {
+    return false;
+  }
+
+  await reloadRuntimeSnapshot(runtime);
+  if (!runtime.portConnected) {
+    return false;
+  }
+  publishSnapshot(runtime);
+  return true;
 }
 
 export function syncSettingsToPage(runtime: ContentRuntime): void {

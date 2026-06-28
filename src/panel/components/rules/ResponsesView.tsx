@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ResponseImageTools } from "./ResponseImageTools";
 import type { PanelController } from "../../usePanelController";
 import { Badge, EmptyState, Field, FooterActions, PaneHeader, SearchField, StatusDot } from "./RulesShared";
 
@@ -228,21 +229,26 @@ function ResponseDetailPane({
               }
             />
           </Field>
-          <Field label="Detail JSON" span2>
-            <textarea
-              spellCheck={false}
-              className="control-textarea mono"
-              value={draft.detailText}
-              onChange={(event) =>
-                controller.setState((current) => ({
-                  ...current,
-                  responseDraft: current.responseDraft
-                    ? { ...current.responseDraft, detailText: event.target.value }
-                    : null,
-                }))
-              }
-            />
-          </Field>
+        </div>
+        <ResponseImageTools controller={controller} />
+        <div className="workspace-section">
+          <div className="form-grid">
+            <Field label="Detail JSON" span2>
+              <textarea
+                spellCheck={false}
+                className="control-textarea mono"
+                value={draft.detailText}
+                onChange={(event) =>
+                  controller.setState((current) => ({
+                    ...current,
+                    responseDraft: current.responseDraft
+                      ? { ...current.responseDraft, detailText: event.target.value }
+                      : null,
+                  }))
+                }
+              />
+            </Field>
+          </div>
         </div>
       </div>
       <FooterActions
