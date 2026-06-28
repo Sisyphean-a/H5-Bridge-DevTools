@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { formatJson } from "../shared/json";
 import { LogsPanel } from "./components/LogsPanel";
 import { ManualEmit } from "./components/ManualEmit";
 import { RuleWorkspace } from "./components/RuleWorkspace";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Toolbar } from "./components/Toolbar";
+import { shouldHandleMouseBack } from "./navigationState";
 import { usePanelController } from "./usePanelController";
 
 interface AppProps {
@@ -42,19 +43,30 @@ export function App({ tabId }: AppProps) {
     />
   );
 
+  function handleMouseDownCapture(event: ReactMouseEvent<HTMLDivElement>): void {
+    if (
+      !shouldHandleMouseBack(
+        event.button,
+        event.target,
+        state.navigation.history.length,
+      )
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    controller.goBack();
+  }
+
   return (
-    <div className="app-shell">
+    <div className="app-shell" onMouseDownCapture={handleMouseDownCapture}>
       <Toolbar
         snapshot={state.snapshot}
         importStrategy={state.importStrategy}
         isWide={isWide}
         activeTab={state.activeTab}
-        onTabChange={(tab) =>
-          setState((current) => ({
-            ...current,
-            activeTab: tab,
-          }))
-        }
+        onTabChange={controller.selectPanelTab}
         onToggleGlobal={(enabled) =>
           postCommand({ type: "SET_GLOBAL_ENABLED", enabled })
         }

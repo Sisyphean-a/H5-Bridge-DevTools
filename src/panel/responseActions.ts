@@ -2,6 +2,14 @@ import { createBlankResponse } from "../shared/presets";
 import { safeParseJson } from "../shared/json";
 import { validateResponse } from "../shared/rules";
 import type { BridgeResponseOption } from "../shared/senderTypes";
+import {
+  buildResponseDetailRoute,
+  pushRouteState,
+  buildRulesSubTabRoute,
+  removeResponseFromNavigation,
+  replaceRouteState,
+  shouldReplaceDetailRoute,
+} from "./navigationState";
 import { createResponseDraft, formatResponseDraftJson } from "./utils";
 import { findResponseRecord, findSender } from "./controllerFilters";
 import type { PanelActionContext } from "./actionContext";
@@ -19,9 +27,13 @@ export function selectResponse(
   if (!record) {
     return;
   }
-  context.setState((current) =>
-    openResponseState(current, record.sender, record.response, rulesSubTab),
-  );
+  context.setState((current) => {
+    const next = openResponseState(current, record.sender, record.response, rulesSubTab);
+    const route = buildResponseDetailRoute(record.sender.id, record.response.id);
+    return shouldReplaceDetailRoute(current, route)
+      ? replaceRouteState(next, route)
+      : pushRouteState(next, route);
+  });
 }
 
 export function createResponseForSender(context: PanelActionContext, senderId: string): void {
@@ -35,7 +47,13 @@ export function createResponseForSender(context: PanelActionContext, senderId: s
   if (sender.responses.length === 0 || !sender.activeResponseId) {
     postCommand(context, { type: "SET_ACTIVE_RESPONSE", senderId, responseId: response.id });
   }
-  context.setState((current) => openResponseState(current, sender, response));
+  context.setState((current) => {
+    const next = openResponseState(current, sender, response);
+    const route = buildResponseDetailRoute(sender.id, response.id);
+    return shouldReplaceDetailRoute(current, route)
+      ? replaceRouteState(next, route)
+      : pushRouteState(next, route);
+  });
 }
 
 export function saveResponse(context: PanelActionContext): void {
@@ -74,14 +92,24 @@ export function deleteResponse(context: PanelActionContext): void {
     senderId: record.sender.id,
     responseId: record.response.id,
   });
-  context.setState((current) => ({
-    ...current,
-    selectedResponse: nextResponse
-      ? { senderId: record.sender.id, responseId: nextResponse.id }
-      : null,
-    responseDraft: nextResponse ? createResponseDraft(record.sender.id, nextResponse) : null,
-    narrowDetailOpen: Boolean(nextResponse),
-  }));
+  context.setState((current) => {
+    const next = {
+      ...current,
+      selectedResponse: nextResponse
+        ? { senderId: record.sender.id, responseId: nextResponse.id }
+        : null,
+      responseDraft: nextResponse ? createResponseDraft(record.sender.id, nextResponse) : null,
+      narrowDetailOpen: Boolean(nextResponse),
+    };
+    return removeResponseFromNavigation(
+      next,
+      record.sender.id,
+      record.response.id,
+      nextResponse
+        ? buildResponseDetailRoute(record.sender.id, nextResponse.id)
+        : buildRulesSubTabRoute("responses"),
+    );
+  });
 }
 
 export function resetResponse(context: PanelActionContext): void {

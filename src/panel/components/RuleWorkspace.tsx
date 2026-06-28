@@ -28,13 +28,7 @@ export function RuleWorkspace({
                 key={tab.id}
                 type="button"
                 className={`subtab-button${active ? " is-active" : ""}`}
-                onClick={() =>
-                  controller.setState((current) => ({
-                    ...current,
-                    rulesSubTab: tab.id,
-                    narrowDetailOpen: false,
-                  }))
-                }
+                onClick={() => controller.selectRulesSubTab(tab.id)}
               >
                 <span>{tab.label}</span>
                 <span className="subtab-button__count">{getTabCount(controller, tab.id)}</span>

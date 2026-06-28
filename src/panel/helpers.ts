@@ -1,4 +1,5 @@
 import type { BridgePanelSnapshot } from "../shared/bridgeTypes";
+import { syncNavigationSnapshotState } from "./navigationState";
 import type { AppViewState, ResponseDraft, SenderDraft } from "./types";
 import { createResponseDraft, createSenderDraft } from "./utils";
 
@@ -10,7 +11,7 @@ export function syncSnapshotState(
   const responseState = syncResponseDraft(current, snapshot);
   const toast = buildRemoteUpdateToast(senderState, responseState);
 
-  return {
+  const next = {
     ...current,
     snapshot,
     selectedSenderId: senderState.selectedSenderId,
@@ -19,6 +20,7 @@ export function syncSnapshotState(
     responseDraft: responseState.responseDraft,
     toast: toast ?? current.toast,
   };
+  return syncNavigationSnapshotState(current, next);
 }
 
 function syncSenderDraft(

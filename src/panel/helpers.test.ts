@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import {
+  buildResponseDetailRoute,
+  buildRulesSubTabRoute,
+  buildSenderDetailRoute,
+} from "./navigationState";
 import { createResponseDraft, createSenderDraft } from "./utils";
 import {
   hasActiveExtensionRuntime,
@@ -13,6 +18,10 @@ function createViewState(
   snapshotOverrides: Parameters<typeof createSnapshot>[0] = {},
 ): AppViewState {
   return {
+    navigation: {
+      current: buildRulesSubTabRoute("senders"),
+      history: [],
+    },
     snapshot: createSnapshot(snapshotOverrides),
     selectedSenderId: null,
     senderDraft: null,
@@ -32,7 +41,7 @@ function createViewState(
 describe("syncSnapshotState", () => {
   it("在缺少 senderDraft 时会按最新快照补齐", () => {
     const sender = createSender("sender-1", { name: "新名称", matchEvent: "updated-event" });
-    const current = {
+    const current: AppViewState = {
       ...createViewState(),
       snapshot: null,
       selectedSenderId: sender.id,
@@ -51,7 +60,7 @@ describe("syncSnapshotState", () => {
 
   it("只要已有 senderDraft，就会保留本地草稿而不是跟随新快照刷新", () => {
     const sender = createSender("sender-1", { name: "旧名称" });
-    const current = {
+    const current: AppViewState = {
       ...createViewState({ senders: [sender] }),
       selectedSenderId: sender.id,
       senderDraft: createSenderDraft(sender),
@@ -70,7 +79,7 @@ describe("syncSnapshotState", () => {
 
   it("本地已修改 senderDraft 时会保留草稿并提示远端更新", () => {
     const sender = createSender("sender-1", { name: "旧名称" });
-    const current = {
+    const current: AppViewState = {
       ...createViewState({ senders: [sender] }),
       selectedSenderId: sender.id,
       senderDraft: { ...createSenderDraft(sender), name: "本地修改名称" },
@@ -92,7 +101,7 @@ describe("syncSnapshotState", () => {
   it("未修改的 responseDraft 会跟随远端快照刷新", () => {
     const response = createResponse("resp-1", { name: "旧响应" });
     const sender = createSender("sender-1", { responses: [response], activeResponseId: response.id });
-    const current = {
+    const current: AppViewState = {
       ...createViewState({ senders: [sender] }),
       selectedResponse: { senderId: sender.id, responseId: response.id },
       responseDraft: createResponseDraft(sender.id, response),
@@ -117,7 +126,7 @@ describe("syncSnapshotState", () => {
   it("在响应仍存在时会保留本地已修改的 responseDraft 并提示远端更新", () => {
     const response = createResponse("resp-1", { name: "旧响应" });
     const sender = createSender("sender-1", { responses: [response], activeResponseId: response.id });
-    const current = {
+    const current: AppViewState = {
       ...createViewState({ senders: [sender] }),
       selectedResponse: { senderId: sender.id, responseId: response.id },
       responseDraft: { ...createResponseDraft(sender.id, response), name: "本地响应修改" },
@@ -141,6 +150,68 @@ describe("syncSnapshotState", () => {
       level: "info",
       message: "已收到远端响应更新，当前保留本地未保存草稿。",
     });
+  });
+
+  it("当前 sender 详情在快照中被删除时会降级回发送列表", () => {
+    const sender = createSender("sender-1", { name: "旧名称" });
+    const current: AppViewState = {
+      ...createViewState({ senders: [sender] }),
+      navigation: {
+        current: buildSenderDetailRoute(sender.id),
+        history: [{ tab: "logs" } as const],
+      },
+      selectedSenderId: sender.id,
+      senderDraft: createSenderDraft(sender),
+      narrowDetailOpen: true,
+    };
+
+    const next = syncSnapshotState(current, createSnapshot({ senders: [] }));
+
+    expect(next.navigation.current).toEqual({
+      tab: "rules",
+      rulesSubTab: "senders",
+      detail: "list",
+    });
+    expect(next.selectedSenderId).toBeNull();
+    expect(next.senderDraft).toBeNull();
+    expect(next.narrowDetailOpen).toBe(false);
+  });
+
+  it("当前 response 详情在快照中被删除时会降级回响应列表", () => {
+    const response = createResponse("resp-1");
+    const sender = createSender("sender-1", {
+      responses: [response],
+      activeResponseId: response.id,
+    });
+    const current: AppViewState = {
+      ...createViewState({ senders: [sender] }),
+      navigation: {
+        current: buildResponseDetailRoute(sender.id, response.id),
+        history: [buildRulesSubTabRoute("matches")],
+      },
+      selectedSenderId: sender.id,
+      senderDraft: createSenderDraft(sender),
+      selectedResponse: { senderId: sender.id, responseId: response.id },
+      responseDraft: createResponseDraft(sender.id, response),
+      rulesSubTab: "responses",
+      narrowDetailOpen: true,
+    };
+
+    const next = syncSnapshotState(
+      current,
+      createSnapshot({
+        senders: [createSender(sender.id, { ...sender, responses: [], activeResponseId: null })],
+      }),
+    );
+
+    expect(next.navigation.current).toEqual({
+      tab: "rules",
+      rulesSubTab: "responses",
+      detail: "list",
+    });
+    expect(next.selectedResponse).toBeNull();
+    expect(next.responseDraft).toBeNull();
+    expect(next.narrowDetailOpen).toBe(false);
   });
 });
 

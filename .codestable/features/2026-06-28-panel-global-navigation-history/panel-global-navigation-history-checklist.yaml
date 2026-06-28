@@ -1,0 +1,45 @@
+feature: 2026-06-28-panel-global-navigation-history
+created: 2026-06-28
+
+steps:
+  - action: "微重构：抽出 panel 导航纯状态模块，先承接现有 tab / detail 切换语义"
+    exit_signal: "导航 helper 已成为唯一的路由字段写入口，且 npm run typecheck、npm run test、npm run build 全部通过"
+    status: done
+  - action: "顶层与规则子页签接入统一导航层，建立可回退的页面历史"
+    exit_signal: "Toolbar 与 RuleWorkspace 不再直接写 activeTab/rulesSubTab/narrowDetailOpen，且切页后历史栈能反映进入顺序"
+    status: done
+  - action: "把发送/响应详情、匹配页编辑、日志页创建规则接入 push/replace 语义"
+    exit_signal: "跨页动作都会生成正确来源历史，同类详情切换不会额外堆叠多条历史"
+    status: done
+  - action: "在快照同步与删除路径上加入路由失效清洗与降级回退"
+    exit_signal: "sender/response 被删除后，当前页和 back 都只会落到可渲染页面，不会指向失效详情"
+    status: done
+  - action: "接入 panel 根容器鼠标侧键返回，并补齐自动化与手工验证"
+    exit_signal: "侧键返回、无历史 no-op、可编辑控件忽略侧键三类行为都有测试和手工证据"
+    status: done
+
+checks:
+  - item: "本 feature 只改 panel 导航，不引入 URL、深链接、forward 栈、面包屑或额外可见返回按钮"
+    source: 范围守护
+    status: pending
+  - item: "PanelRoute 能完整描述 logs/manual/settings 与 rules 的 matches/senders/responses 列表、详情页面"
+    source: 名词契约
+    status: pending
+  - item: "activeTab/rulesSubTab/narrowDetailOpen 只允许由统一导航层投影更新，组件不再直接内联写这些路由字段"
+    source: 编排骨架
+    status: pending
+  - item: "跨页跳转走 push，同类详情切换走 replace，back 能按真实来源页返回"
+    source: 流程级约束
+    status: pending
+  - item: "sender/response 删除或快照失效后，历史回退会自动跳过无效详情并降级到最近的可用列表页"
+    source: 流程级约束
+    status: pending
+  - item: "Panel 根容器已挂入全局鼠标侧键返回入口，Toolbar/RuleWorkspace/Logs/Matches/详情返回都接入统一导航层"
+    source: 挂载点
+    status: pending
+  - item: "小屏发送详情、匹配页编辑响应、日志页创建规则三类跳页都能通过侧键回到原入口"
+    source: 验收场景
+    status: pending
+  - item: "在输入框/文本域/下拉框内触发鼠标侧键不会误切页"
+    source: 验收场景
+    status: pending

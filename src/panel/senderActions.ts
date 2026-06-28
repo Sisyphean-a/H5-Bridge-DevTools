@@ -2,6 +2,15 @@ import type { BridgeLogItem } from "../shared/bridgeTypes";
 import { createBlankSender, getPresetSenderById } from "../shared/presets";
 import { createSenderFromLog, findEquivalentResponseIndex, validateSender } from "../shared/rules";
 import type { BridgeSender } from "../shared/senderTypes";
+import {
+  buildResponseDetailRoute,
+  buildRulesSubTabRoute,
+  buildSenderDetailRoute,
+  removeSenderFromNavigation,
+  pushRouteState,
+  replaceRouteState,
+  shouldReplaceDetailRoute,
+} from "./navigationState";
 import { createSenderDraft } from "./utils";
 import { findSender } from "./controllerFilters";
 import type { PanelActionContext } from "./actionContext";
@@ -14,7 +23,13 @@ export function selectSender(context: PanelActionContext, senderId: string): voi
   if (!sender) {
     return;
   }
-  context.setState((current) => selectSenderState(current, sender));
+  context.setState((current) => {
+    const next = selectSenderState(current, sender);
+    const route = buildSenderDetailRoute(sender.id);
+    return shouldReplaceDetailRoute(current, route)
+      ? replaceRouteState(next, route)
+      : pushRouteState(next, route);
+  });
 }
 
 export function openSenderTab(context: PanelActionContext, senderId: string): void {
@@ -22,11 +37,13 @@ export function openSenderTab(context: PanelActionContext, senderId: string): vo
   if (!sender) {
     return;
   }
-  context.setState((current) => ({
-    ...selectSenderState(current, sender),
-    activeTab: "rules",
-    rulesSubTab: "senders",
-  }));
+  context.setState((current) => {
+    const next = selectSenderState(current, sender);
+    const route = buildSenderDetailRoute(sender.id);
+    return shouldReplaceDetailRoute(current, route)
+      ? replaceRouteState(next, route)
+      : pushRouteState(next, route);
+  });
 }
 
 export function addBlankSender(context: PanelActionContext): void {
@@ -79,14 +96,7 @@ export function deleteSender(context: PanelActionContext): void {
     return;
   }
   postCommand(context, { type: "DELETE_SENDER", senderId });
-  context.setState((current) => ({
-    ...current,
-    selectedSenderId: null,
-    senderDraft: null,
-    selectedResponse: current.selectedResponse?.senderId === senderId ? null : current.selectedResponse,
-    responseDraft: current.selectedResponse?.senderId === senderId ? null : current.responseDraft,
-    narrowDetailOpen: false,
-  }));
+  context.setState((current) => removeSenderFromNavigation(current, senderId));
 }
 
 export function duplicateSender(context: PanelActionContext): void {
@@ -128,7 +138,13 @@ function hydrateNewSender(
   sender: BridgeSender,
   rulesSubTab: "senders" | "responses",
 ): void {
-  context.setState((current) => openSenderState(current, sender, rulesSubTab));
+  context.setState((current) => {
+    const next = openSenderState(current, sender, rulesSubTab);
+    const route = buildSenderDetailRoute(sender.id);
+    return shouldReplaceDetailRoute(current, route)
+      ? replaceRouteState(next, route)
+      : pushRouteState(next, route);
+  });
 }
 
 function buildSenderFromDraft(draft: SenderDraft, source: BridgeSender): BridgeSender {
@@ -194,13 +210,20 @@ function appendResponsesToExistingSender(
 
   context.setState((current) =>
     focusResponse
-      ? openResponseState(current, target, focusResponse, rulesSubTab)
-      : {
-          ...selectSenderState(current, target),
-          activeTab: "rules",
-          rulesSubTab,
-          selectedResponse,
-          responseDraft: current.responseDraft,
-        },
+      ? (() => {
+          const next = openResponseState(current, target, focusResponse, rulesSubTab);
+          const route = buildResponseDetailRoute(target.id, focusResponse.id);
+          return shouldReplaceDetailRoute(current, route)
+            ? replaceRouteState(next, route)
+            : pushRouteState(next, route);
+        })()
+      : pushRouteState(
+          {
+            ...selectSenderState(current, target),
+            selectedResponse,
+            responseDraft: current.responseDraft,
+          },
+          buildRulesSubTabRoute(rulesSubTab),
+        ),
   );
 }

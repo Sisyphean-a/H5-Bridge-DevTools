@@ -30,6 +30,13 @@ import {
   syncSnapshotState,
 } from "./helpers";
 import {
+  buildRulesSubTabRoute,
+  buildTabRoute,
+  createInitialNavigationState,
+  navigateBackState,
+  pushRouteState,
+} from "./navigationState";
+import {
   copyText,
   createInitialManualEmitDraft,
   exportRules,
@@ -61,6 +68,7 @@ import {
 import type { AppViewState } from "./types";
 
 const initialState: AppViewState = {
+  navigation: createInitialNavigationState(),
   snapshot: null,
   selectedSenderId: null,
   senderDraft: null,
@@ -91,6 +99,8 @@ export interface PanelController {
   responseCount: number;
   pairedSenderCount: number;
   postCommand: (command: Parameters<typeof postCommand>[1]) => void;
+  selectPanelTab: (tab: AppViewState["activeTab"]) => void;
+  selectRulesSubTab: (tab: AppViewState["rulesSubTab"]) => void;
   selectSender: (senderId: string) => void;
   openSenderTab: (senderId: string) => void;
   selectResponse: (senderId: string, responseId: string) => void;
@@ -113,6 +123,7 @@ export interface PanelController {
   exportRules: () => void;
   importRules: (content: string) => void;
   copyText: (text: string) => void;
+  goBack: () => void;
 }
 
 export function usePanelController(tabId: number): PanelController {
@@ -164,6 +175,10 @@ export function usePanelController(tabId: number): PanelController {
     responseCount,
     pairedSenderCount,
     postCommand: (command) => postCommand(context, command),
+    selectPanelTab: (tab) =>
+      setState((current) => pushRouteState(current, buildTabRoute(current, tab))),
+    selectRulesSubTab: (tab) =>
+      setState((current) => pushRouteState(current, buildRulesSubTabRoute(tab))),
     selectSender: (senderId) => selectSender(context, senderId),
     openSenderTab: (senderId) => openSenderTab(context, senderId),
     selectResponse: (senderId, responseId) =>
@@ -188,6 +203,7 @@ export function usePanelController(tabId: number): PanelController {
     exportRules: () => exportRules(context),
     importRules: (content) => importRules(context, content),
     copyText: (text) => copyText(context, text),
+    goBack: () => setState((current) => navigateBackState(current)),
   };
 }
 

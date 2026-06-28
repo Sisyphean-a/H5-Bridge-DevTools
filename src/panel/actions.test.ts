@@ -1,16 +1,31 @@
 import { describe, expect, it } from "vitest";
 import { createInitialManualEmitDraft } from "./panelActions";
 import type { PanelActionContext } from "./actionContext";
-import { deleteResponse, saveResponse, createResponseForSender } from "./responseActions";
-import { deleteSender, selectSender } from "./senderActions";
+import {
+  buildRulesSubTabRoute,
+  buildTabRoute,
+  buildResponseDetailRoute,
+} from "./navigationState";
+import {
+  createResponseForSender,
+  deleteResponse,
+  saveResponse,
+  selectResponse,
+} from "./responseActions";
+import { createSenderFromLogEntry, deleteSender, selectSender } from "./senderActions";
 import type { AppViewState } from "./types";
 import { createResponseDraft, createSenderDraft } from "./utils";
 import { createResponse, createSender, createSnapshot } from "../test/factories";
+import type { BridgeLogItem } from "../shared/bridgeTypes";
 
 function createState(
   overrides: Partial<AppViewState> = {},
 ): AppViewState {
   return {
+    navigation: {
+      current: buildRulesSubTabRoute("senders"),
+      history: [],
+    },
     snapshot: createSnapshot(),
     selectedSenderId: null,
     senderDraft: null,
@@ -71,6 +86,15 @@ describe("panel action flows", () => {
     expect(harness.getState().selectedSenderId).toBe(sender.id);
     expect(harness.getState().senderDraft).toEqual(createSenderDraft(sender));
     expect(harness.getState().narrowDetailOpen).toBe(true);
+    expect(harness.getState().navigation.history).toEqual([
+      { tab: "rules", rulesSubTab: "senders", detail: "list" },
+    ]);
+    expect(harness.getState().navigation.current).toEqual({
+      tab: "rules",
+      rulesSubTab: "senders",
+      detail: "detail",
+      senderId: sender.id,
+    });
   });
 
   it("deleteSender 会发送删除命令并清空关联选中状态", () => {
@@ -98,6 +122,11 @@ describe("panel action flows", () => {
     expect(harness.getState().selectedSenderId).toBeNull();
     expect(harness.getState().selectedResponse).toBeNull();
     expect(harness.getState().responseDraft).toBeNull();
+    expect(harness.getState().navigation.current).toEqual({
+      tab: "rules",
+      rulesSubTab: "senders",
+      detail: "list",
+    });
   });
 
   it("createResponseForSender 会为无响应 sender 建立响应并激活", () => {
@@ -140,6 +169,13 @@ describe("panel action flows", () => {
       responseId: createdResponseId,
     });
     expect(harness.getState().rulesSubTab).toBe("responses");
+    expect(harness.getState().navigation.current).toEqual({
+      tab: "rules",
+      rulesSubTab: "responses",
+      detail: "detail",
+      senderId: sender.id,
+      responseId: createdResponseId,
+    });
   });
 
   it("deleteResponse 会切到同 sender 的下一个响应", () => {
@@ -152,6 +188,10 @@ describe("panel action flows", () => {
     const harness = createHarness(
       createState({
         snapshot: createSnapshot({ senders: [sender] }),
+        navigation: {
+          current: buildResponseDetailRoute(sender.id, first.id),
+          history: [{ tab: "rules", rulesSubTab: "matches" }],
+        },
         selectedResponse: { senderId: sender.id, responseId: first.id },
         responseDraft: createResponseDraft(sender.id, first),
       }),
@@ -175,6 +215,9 @@ describe("panel action flows", () => {
       responseId: second.id,
     });
     expect(harness.getState().responseDraft).toEqual(createResponseDraft(sender.id, second));
+    expect(harness.getState().navigation.current).toEqual(
+      buildResponseDetailRoute(sender.id, second.id),
+    );
   });
 
   it("saveResponse 遇到非法 JSON 会保留本地状态并提示错误", () => {
@@ -196,5 +239,63 @@ describe("panel action flows", () => {
     expect(harness.messages).toEqual([]);
     expect(harness.getState().toast?.level).toBe("error");
     expect(harness.getState().toast?.message).toContain("Detail JSON 无效");
+  });
+
+  it("从匹配页进入响应详情时会把来源页压入历史", () => {
+    const response = createResponse("resp-1");
+    const sender = createSender("sender-1", {
+      responses: [response],
+      activeResponseId: response.id,
+    });
+    const harness = createHarness(
+      createState({
+        navigation: {
+          current: { tab: "rules", rulesSubTab: "matches" },
+          history: [],
+        },
+        rulesSubTab: "matches",
+        snapshot: createSnapshot({ senders: [sender] }),
+      }),
+    );
+
+    selectResponse(harness.context, sender.id, response.id);
+
+    expect(harness.getState().navigation.history).toEqual([
+      { tab: "rules", rulesSubTab: "matches" },
+    ]);
+    expect(harness.getState().navigation.current).toEqual(
+      buildResponseDetailRoute(sender.id, response.id),
+    );
+  });
+
+  it("从日志页创建规则时会把日志页压入历史", () => {
+    const log: BridgeLogItem = {
+      id: "log-1",
+      type: "SEND",
+      event: "openCamera",
+      timestamp: 1,
+      payload: { event: "openCamera", data: { ok: true } },
+    };
+    const harness = createHarness(
+      createState({
+        navigation: {
+          current: buildTabRoute(createState(), "logs"),
+          history: [],
+        },
+        activeTab: "logs",
+      }),
+    );
+
+    createSenderFromLogEntry(harness.context, log);
+
+    expect(harness.getState().navigation.history).toEqual([{ tab: "logs" }]);
+    expect(harness.getState().navigation.current).toEqual({
+      tab: "rules",
+      rulesSubTab: "senders",
+      detail: "detail",
+      senderId: harness.getState().selectedSenderId!,
+    });
+    expect(harness.getState().rulesSubTab).toBe("senders");
+    expect(harness.getState().senderDraft).not.toBeNull();
   });
 });

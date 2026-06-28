@@ -3,6 +3,26 @@ import type { ImportStrategy } from "../shared/ruleTypes";
 
 export type PanelTabId = "rules" | "logs" | "manual" | "settings";
 export type RulesSubTab = "senders" | "responses" | "matches";
+export type PanelRoute =
+  | { tab: "logs" }
+  | { tab: "manual" }
+  | { tab: "settings" }
+  | { tab: "rules"; rulesSubTab: "matches" }
+  | { tab: "rules"; rulesSubTab: "senders"; detail: "list" }
+  | { tab: "rules"; rulesSubTab: "senders"; detail: "detail"; senderId: string }
+  | { tab: "rules"; rulesSubTab: "responses"; detail: "list" }
+  | {
+      tab: "rules";
+      rulesSubTab: "responses";
+      detail: "detail";
+      senderId: string;
+      responseId: string;
+    };
+
+export interface PanelNavigationState {
+  current: PanelRoute;
+  history: PanelRoute[];
+}
 
 export interface ToastState {
   level: "success" | "info" | "error";
@@ -36,6 +56,7 @@ export interface ManualEmitDraft {
 }
 
 export interface AppViewState {
+  navigation: PanelNavigationState;
   snapshot: BridgePanelSnapshot | null;
   selectedSenderId: string | null;
   senderDraft: SenderDraft | null;

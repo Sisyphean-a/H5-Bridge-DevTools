@@ -159,9 +159,7 @@ function ResponseDetailPane({
             <button
               type="button"
               className="control-button control-button--ghost control-button--quiet"
-              onClick={() =>
-                controller.setState((current) => ({ ...current, narrowDetailOpen: false }))
-              }
+              onClick={controller.goBack}
             >
               返回列表
             </button>

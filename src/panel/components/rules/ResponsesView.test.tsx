@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { buildResponseDetailRoute } from "../../navigationState";
 import { createResponseDraft } from "../../utils";
 import type { PanelController } from "../../usePanelController";
 import { createResponse, createSender } from "../../../test/factories";
@@ -16,6 +17,10 @@ function createController(): PanelController {
 
   return {
     state: {
+      navigation: {
+        current: buildResponseDetailRoute(sender.id, response.id),
+        history: [],
+      },
       responseDraft: createResponseDraft(sender.id, response),
       narrowDetailOpen: true,
     },
