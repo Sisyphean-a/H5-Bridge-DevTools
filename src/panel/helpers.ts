@@ -91,6 +91,19 @@ function isResponseDraftDirty(draft: ResponseDraft, fresh: ResponseDraft): boole
   );
 }
 
+export function hasActiveExtensionRuntime(
+  runtime: Partial<Pick<typeof chrome.runtime, "connect" | "id">> | undefined,
+): runtime is Pick<typeof chrome.runtime, "connect" | "id"> {
+  return typeof runtime?.connect === "function" && typeof runtime.id === "string" && runtime.id.length > 0;
+}
+
+export function isExtensionContextInvalidatedError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes("Extension context invalidated")
+  );
+}
+
 export function requestSnapshot(port: chrome.runtime.Port, tabId: number): void {
   port.postMessage({
     type: "PANEL_COMMAND",

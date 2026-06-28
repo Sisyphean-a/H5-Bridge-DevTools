@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createResponseDraft, createSenderDraft } from "./utils";
-import { syncSnapshotState } from "./helpers";
+import {
+  hasActiveExtensionRuntime,
+  isExtensionContextInvalidatedError,
+  syncSnapshotState,
+} from "./helpers";
 import type { AppViewState } from "./types";
 import { createInitialManualEmitDraft } from "./panelActions";
 import { createResponse, createSender, createSnapshot } from "../test/factories";
@@ -86,5 +90,29 @@ describe("syncSnapshotState", () => {
 
     expect(next.responseDraft?.name).toBe("本地响应修改");
     expect(next.selectedResponse).toEqual({ senderId: sender.id, responseId: response.id });
+  });
+});
+
+describe("panel runtime guards", () => {
+  it("只有 runtime id 和 connect 都存在时才允许重连", () => {
+    const connect = (() => {
+      throw new Error("not implemented");
+    }) as typeof chrome.runtime.connect;
+
+    expect(hasActiveExtensionRuntime({ id: "ext-1", connect })).toBe(true);
+    expect(hasActiveExtensionRuntime(undefined)).toBe(false);
+    expect(hasActiveExtensionRuntime({ id: "ext-1" })).toBe(false);
+    expect(hasActiveExtensionRuntime({ connect })).toBe(false);
+    expect(hasActiveExtensionRuntime({ id: "", connect })).toBe(false);
+  });
+
+  it("会识别扩展上下文失效错误", () => {
+    expect(
+      isExtensionContextInvalidatedError(new Error("Extension context invalidated.")),
+    ).toBe(true);
+    expect(
+      isExtensionContextInvalidatedError(new Error("Attempting to use a disconnected port object")),
+    ).toBe(false);
+    expect(isExtensionContextInvalidatedError("Extension context invalidated")).toBe(false);
   });
 });

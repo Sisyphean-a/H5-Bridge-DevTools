@@ -11,7 +11,7 @@ import type { BridgeLogItem } from "../shared/bridgeTypes";
 import type { BackgroundToPanelMessage } from "../shared/messageTypes";
 import { getPresetSenders } from "../shared/presets";
 import type { BridgeSender } from "../shared/senderTypes";
-import { type PanelActionContext, postCommand } from "./actionContext";
+import { type PanelActionContext, postCommand, setToast } from "./actionContext";
 import {
   countPairedSenders,
   countResponses,
@@ -23,7 +23,12 @@ import {
   findSender,
   type ResponseRecord,
 } from "./controllerFilters";
-import { requestSnapshot, syncSnapshotState } from "./helpers";
+import {
+  hasActiveExtensionRuntime,
+  isExtensionContextInvalidatedError,
+  requestSnapshot,
+  syncSnapshotState,
+} from "./helpers";
 import {
   copyText,
   createInitialManualEmitDraft,
@@ -70,6 +75,8 @@ const initialState: AppViewState = {
   rulesSubTab: "matches",
   narrowDetailOpen: false,
 };
+
+const panelContextInvalidatedMessage = "扩展已重载，请关闭并重新打开 DevTools 面板。";
 
 export interface PanelController {
   state: AppViewState;
@@ -198,7 +205,22 @@ function usePanelConnection(
         return;
       }
 
-      const port = chrome.runtime.connect({ name: "h5-bridge-panel" });
+      const runtime = chrome.runtime;
+      if (!hasActiveExtensionRuntime(runtime)) {
+        setToast({ setState }, "error", panelContextInvalidatedMessage);
+        return;
+      }
+
+      let port: chrome.runtime.Port;
+      try {
+        port = runtime.connect({ name: "h5-bridge-panel" });
+      } catch (error) {
+        if (isExtensionContextInvalidatedError(error)) {
+          setToast({ setState }, "error", panelContextInvalidatedMessage);
+          return;
+        }
+        throw error;
+      }
       portRef.current = port;
       port.postMessage({ type: "PANEL_INIT", tabId });
 
