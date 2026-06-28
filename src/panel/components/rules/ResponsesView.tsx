@@ -3,6 +3,8 @@ import { ResponseImageTools } from "./ResponseImageTools";
 import type { PanelController } from "../../usePanelController";
 import { Badge, EmptyState, Field, FooterActions, PaneHeader, SearchField, StatusDot } from "./RulesShared";
 
+type ResponseEditorMode = "text" | "image";
+
 export function ResponsesView({
   controller,
   isWide,
@@ -133,6 +135,15 @@ function ResponseDetailPane({
 }) {
   const record = controller.selectedResponseRecord;
   const draft = controller.state.responseDraft;
+  const [editorMode, setEditorMode] = useState<ResponseEditorMode>("text");
+
+  useEffect(() => {
+    if (!draft) {
+      return;
+    }
+    setEditorMode("text");
+  }, [draft?.id]);
+
   if (!record || !draft) {
     return (
       <section className="workspace-pane">
@@ -229,27 +240,40 @@ function ResponseDetailPane({
               }
             />
           </Field>
+          <Field label="编辑模式" span2>
+            <select
+              className="control-select"
+              value={editorMode}
+              onChange={(event) => setEditorMode(event.target.value as ResponseEditorMode)}
+            >
+              <option value="text">文字模式</option>
+              <option value="image">图片模式</option>
+            </select>
+          </Field>
         </div>
-        <ResponseImageTools controller={controller} />
-        <div className="workspace-section">
-          <div className="form-grid">
-            <Field label="Detail JSON" span2>
-              <textarea
-                spellCheck={false}
-                className="control-textarea mono"
-                value={draft.detailText}
-                onChange={(event) =>
-                  controller.setState((current) => ({
-                    ...current,
-                    responseDraft: current.responseDraft
-                      ? { ...current.responseDraft, detailText: event.target.value }
-                      : null,
-                  }))
-                }
-              />
-            </Field>
+        {editorMode === "image" ? (
+          <ResponseImageTools controller={controller} />
+        ) : (
+          <div className="workspace-section">
+            <div className="form-grid">
+              <Field label="Detail JSON" span2>
+                <textarea
+                  spellCheck={false}
+                  className="control-textarea mono"
+                  value={draft.detailText}
+                  onChange={(event) =>
+                    controller.setState((current) => ({
+                      ...current,
+                      responseDraft: current.responseDraft
+                        ? { ...current.responseDraft, detailText: event.target.value }
+                        : null,
+                    }))
+                  }
+                />
+              </Field>
+            </div>
           </div>
-        </div>
+        )}
       </div>
       <FooterActions
         primary={

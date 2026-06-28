@@ -9,7 +9,7 @@ import {
   writeImageValueToDetailText,
 } from "../../imageTools";
 import type { PanelController } from "../../usePanelController";
-import { Badge, Field, PaneHeader } from "./RulesShared";
+import { Badge, Field } from "./RulesShared";
 
 const formatLabels: Record<ImageValueFormat, string> = {
   androidUri: "模拟 Android URI",
@@ -85,16 +85,8 @@ export function ResponseImageTools({ controller }: { controller: PanelController
 
   return (
     <section className="workspace-section">
-      <PaneHeader
-        compact
-        title="图片辅助"
-        subtitle="上传图片后，可按常见桥接格式写回当前响应 JSON。"
-      />
-      <div className="form-grid" style={{ marginTop: 12 }}>
-        <Field
-          label="写入格式"
-          hint={format === "androidUri" ? "生成可调试的模拟 URI，不是真实 Android 物理路径。" : "写入不带 data URL 前缀的 Base64 字符串。"}
-        >
+      <div className="form-grid">
+        <Field label="写入格式">
           <select
             className="control-select"
             value={format}
@@ -104,7 +96,7 @@ export function ResponseImageTools({ controller }: { controller: PanelController
             <option value="base64">Base64</option>
           </select>
         </Field>
-        <Field label="目标字段" hint="支持点路径，如 result.faceImg。">
+        <Field label="目标字段">
           <input
             list={`image-field-${draft.id}`}
             className="control-field mono"

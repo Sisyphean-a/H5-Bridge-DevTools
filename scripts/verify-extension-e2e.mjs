@@ -250,10 +250,12 @@ async function saveResponse(panelPage) {
 }
 
 async function readResponseJson(panelPage) {
+  await selectEditorMode(panelPage, "text");
   return await panelPage.locator("textarea").inputValue();
 }
 
 async function writeImageWithTool(panelPage, fixturePath, format, fieldPath) {
+  await selectEditorMode(panelPage, "image");
   await panelPage
     .locator("label.form-field")
     .filter({ hasText: "写入格式" })
@@ -275,6 +277,14 @@ async function writeImageWithTool(panelPage, fixturePath, format, fieldPath) {
       document.body.textContent?.includes(expectedText) ?? false,
     `已写入${format === "base64" ? "Base64" : "模拟 Android URI"}`,
   );
+}
+
+async function selectEditorMode(panelPage, mode) {
+  await panelPage
+    .locator("label.form-field")
+    .filter({ hasText: "编辑模式" })
+    .locator("select")
+    .selectOption(mode);
 }
 
 async function triggerBridgeCall(page) {
