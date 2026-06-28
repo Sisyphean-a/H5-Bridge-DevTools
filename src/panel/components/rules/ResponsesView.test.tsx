@@ -29,16 +29,15 @@ function createController(): PanelController {
 }
 
 describe("ResponsesView", () => {
-  it("默认同时显示 JSON 编辑区和图片字段插入工具", () => {
+  it("默认显示 JSON 编辑区，图片字段工具需点击后再展开", () => {
     const markup = renderToStaticMarkup(
       <ResponsesView controller={createController()} isWide={false} />,
     );
 
     expect(markup).toContain("Detail JSON");
-    expect(markup).toContain("图片字段");
-    expect(markup).toContain("图片格式");
-    expect(markup).toContain("选择图片");
-    expect(markup).toContain("插入图片");
-    expect(markup).not.toContain("编辑模式");
+    expect(markup).toContain("添加图片字段");
+    expect(markup).not.toContain("图片格式");
+    expect(markup).not.toContain("选择图片");
+    expect(markup).not.toContain("插入图片");
   });
 });

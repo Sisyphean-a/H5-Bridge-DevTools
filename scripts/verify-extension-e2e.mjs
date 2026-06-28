@@ -254,6 +254,10 @@ async function readResponseJson(panelPage) {
 }
 
 async function writeImageWithTool(panelPage, fixturePath, format, fieldPath) {
+  const addFieldButton = panelPage.getByText("添加图片字段", { exact: true });
+  if ((await addFieldButton.count()) > 0) {
+    await addFieldButton.click();
+  }
   await panelPage.waitForFunction(
     () => document.body.textContent?.includes("图片格式") ?? false,
   );
