@@ -55,6 +55,32 @@ describe("serviceWorker bridge routing", () => {
       },
     ]);
   });
+
+  it("请求快照时若 content script 尚未重连则回放缓存快照而不是报错", async () => {
+    const harness = await loadServiceWorkerHarness();
+    const snapshot = createSnapshot({ href: "https://example.com/page-c" });
+    const contentPort = createMockPort<ContentPortMessage>("h5-bridge-content", 7);
+    const panelPort = createMockPort<PanelPortMessage>("h5-bridge-panel");
+
+    harness.connect(contentPort.port);
+    contentPort.emitMessage({ type: "CONTENT_READY", snapshot });
+    harness.connect(panelPort.port);
+    panelPort.emitMessage({ type: "PANEL_INIT", tabId: 7 });
+    panelPort.messages.length = 0;
+    contentPort.port.disconnect();
+    panelPort.emitMessage({
+      type: "PANEL_COMMAND",
+      tabId: 7,
+      command: { type: "REQUEST_SNAPSHOT" },
+    });
+
+    expect(panelPort.messages).toEqual([
+      {
+        type: "BACKGROUND_EVENT",
+        event: { type: "SNAPSHOT", snapshot },
+      },
+    ]);
+  });
 });
 
 async function loadServiceWorkerHarness(): Promise<{

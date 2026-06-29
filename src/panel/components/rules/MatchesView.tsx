@@ -17,7 +17,7 @@ export function MatchesView({ controller }: { controller: PanelController }) {
             placeholder="按发送、响应或事件名搜索匹配关系"
           />
         </div>
-        <div className="stack">
+        <div className="stack match-list">
           {controller.filteredMatchSenders.length === 0 ? (
             <EmptyState
               title="暂无匹配关系"

@@ -1,6 +1,5 @@
 import { SOURCE_PAGE } from "../shared/constants";
 import type {
-  BackgroundToContentMessage,
   PageBridgeCallMessage,
   PanelCommand,
 } from "../shared/messageTypes";
@@ -11,16 +10,15 @@ import {
 } from "../shared/rules";
 import type { ImportStrategy, OriginBridgeSettings } from "../shared/ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
+import { bindContentRuntime, createContentRuntime } from "./portConnection";
 import {
   appendLog,
   dispatchToPage,
   initializeRuntime,
   mutateRuntime,
-  postContentMessage,
   publishSnapshot,
   readEventName,
   syncRuntimeFromStorageChange,
-  type ContentRuntime,
   syncSettingsToPage,
   trimLogs,
 } from "./runtime";
@@ -35,66 +33,25 @@ import {
   upsertSenderState,
 } from "./senderState";
 
-const runtime = createRuntime();
+const runtime = createContentRuntime();
 
 export function bootstrapContentScript(): void {
-  const handlePortMessage = (message: BackgroundToContentMessage) => {
-    if (!runtime.portConnected) {
-      return;
-    }
-    void runtime.ready.then(() => handlePanelCommand(message.command));
-  };
-
-  const handleWindowMessage = (event: MessageEvent<PageBridgeCallMessage>) => {
-    if (!runtime.portConnected) {
-      return;
-    }
-    void runtime.ready.then(() => handlePageMessage(event));
-  };
-  const handleStorageChange = (
-    changes: Record<string, chrome.storage.StorageChange>,
-    areaName: string,
-  ) => {
-    void runtime.ready.then(() => syncRuntimeFromStorageChange(runtime, changes, areaName));
-  };
-
-  runtime.ready = initialize().then((snapshot) => {
-    postContentMessage(runtime, { type: "CONTENT_READY", snapshot });
-  });
-
-  runtime.port.onMessage.addListener(handlePortMessage);
-  chrome.storage.onChanged.addListener(handleStorageChange);
-  window.addEventListener("message", handleWindowMessage);
-
-  runtime.port.onDisconnect.addListener(() => {
-    runtime.port.onMessage.removeListener(handlePortMessage);
-    chrome.storage.onChanged.removeListener(handleStorageChange);
-    window.removeEventListener("message", handleWindowMessage);
+  bindContentRuntime(runtime, {
+    initialize,
+    onPortMessage(message) {
+      return handlePanelCommand(message.command);
+    },
+    onStorageChange(changes, areaName) {
+      return syncRuntimeFromStorageChange(runtime, changes, areaName);
+    },
+    onWindowMessage(event) {
+      return handlePageMessage(event);
+    },
   });
 }
 
 async function initialize() {
   return initializeRuntime(runtime);
-}
-
-function createRuntime(): ContentRuntime {
-  const port = chrome.runtime.connect({ name: "h5-bridge-content" });
-  const runtime: ContentRuntime = {
-    port,
-    portConnected: true,
-    state: null,
-    ready: Promise.resolve(),
-    chain: Promise.resolve(),
-  };
-
-  port.onDisconnect.addListener(() => {
-    if (runtime.port !== port) {
-      return;
-    }
-    runtime.portConnected = false;
-  });
-
-  return runtime;
 }
 
 async function handlePageMessage(

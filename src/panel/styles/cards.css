@@ -73,6 +73,14 @@
   background: var(--panel-surface);
 }
 
+.match-list {
+  padding-bottom: 30px;
+}
+
+.match-list > :last-child {
+  margin-bottom: 8px;
+}
+
 .response-option {
   display: flex;
   align-items: center;

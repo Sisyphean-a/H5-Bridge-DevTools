@@ -38,6 +38,10 @@ function attachPanelPort(port: chrome.runtime.Port): void {
 
     const contentPort = contentPorts.get(panelTabId);
     if (!contentPort) {
+      if (message.command.type === "REQUEST_SNAPSHOT") {
+        sendCachedSnapshot(panelTabId);
+        return;
+      }
       postPanelNotice(port, "error", "当前页面未连接 content script。");
       return;
     }

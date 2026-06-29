@@ -105,11 +105,11 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 8px;
+  padding: 8px 8px 12px;
 }
 
 .workspace-pane__body.is-list {
-  padding: 6px;
+  padding: 6px 6px 10px;
 }
 
 .workspace-pane__footer {
@@ -133,6 +133,15 @@
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.search-row > .control-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.search-row > .control-button {
+  flex: none;
 }
 
 .stack {
