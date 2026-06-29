@@ -151,9 +151,9 @@ function didResponseChange(previous: ResponseDraft | null, next: ResponseDraft):
 }
 
 export function hasActiveExtensionRuntime(
-  runtime: Partial<Pick<typeof chrome.runtime, "connect" | "id">> | undefined,
-): runtime is Pick<typeof chrome.runtime, "connect" | "id"> {
-  return typeof runtime?.connect === "function" && typeof runtime.id === "string" && runtime.id.length > 0;
+  runtime: Partial<Pick<typeof chrome.runtime, "sendMessage" | "id">> | undefined,
+): runtime is Pick<typeof chrome.runtime, "sendMessage" | "id"> {
+  return typeof runtime?.sendMessage === "function" && typeof runtime.id === "string" && runtime.id.length > 0;
 }
 
 export function isExtensionContextInvalidatedError(error: unknown): boolean {
@@ -161,12 +161,4 @@ export function isExtensionContextInvalidatedError(error: unknown): boolean {
     error instanceof Error &&
     error.message.includes("Extension context invalidated")
   );
-}
-
-export function requestSnapshot(port: chrome.runtime.Port, tabId: number): void {
-  port.postMessage({
-    type: "PANEL_COMMAND",
-    tabId,
-    command: { type: "REQUEST_SNAPSHOT" },
-  });
 }

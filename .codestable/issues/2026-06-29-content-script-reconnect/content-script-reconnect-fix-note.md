@@ -10,36 +10,53 @@ tags:
   - content-script
 ---
 
-# Content Script 未随 MV3 Worker 恢复连接 修复记录
+# MV3 Worker 休眠导致调试链路抖动 修复记录
 
 ## 1. 问题描述
 
-DevTools 面板会周期性弹出“当前页面未连接 content script。”；频率接近 MV3 service worker 的空闲回收周期，页面本身并未离开匹配域名。
+DevTools 面板会周期性弹出“当前页面未连接 content script。”；频率接近 MV3 service worker 的空闲回收周期。进一步分析后确认问题不只是一条误报，而是调试链路把热路径建立在了会被回收的 background 内存和长连接上。
 
 ## 2. 根因
 
-1. `src/content/controller.ts` 中 content script 的 `chrome.runtime.Port` 断开后只会置位 `portConnected=false`，不会重新连接新的 background worker。
-2. `src/background/serviceWorker.ts` 将 content port 和快照缓存都保存在 worker 内存里；worker 被回收后，panel 重连并立刻发 `REQUEST_SNAPSHOT`，此时 content port 尚未恢复，background 会把启动阶段的缺口误判成错误。
+1. content script、panel、background 之间原本依赖 `runtime.connect` 长连接；MV3 worker 回收后，background 内存态和端口映射一起消失。
+2. content script 的日志采集、panel 的快照同步都间接依赖这条链路，导致 worker 休眠时出现短暂失联，扩展重载后旧页面还会彻底失去注入。
+3. 仅靠“断线后自动重连”只能缓解误报，无法从结构上消除对 worker 常驻的依赖。
 
 ## 3. 修复方案
 
-1. 抽出 content 端口生命周期模块，端口断开后自动重连，并在新连接建立后重新发送 `CONTENT_READY`。
-2. `REQUEST_SNAPSHOT` 在无 content port 但已有缓存快照时只回放缓存，不再提示“未连接 content script”。
+1. content script 改成常驻监听 `window.message`、`storage.onChanged`、`runtime.onMessage`，不再维护 background port。
+2. panel 改成直接按当前 tab URL 从 `chrome.storage` 构建快照，并订阅 `storage.onChanged` 与 `tabs.onUpdated`；不再通过 background 长连接接收快照。
+3. background 改成无状态命令转发：收到 panel 的一次性消息后，用 `tabs.sendMessage` 打到 content script；若收件端不存在，则用 `chrome.scripting.executeScript()` 重新注入 `injectMain.js` 与 `contentScript.js` 后重试。
+4. 为程序化重注入增加幂等保护，避免重复注入造成双重监听。
 
 ## 4. 改动文件清单
 
 - `src/content/controller.ts`
-- `src/content/portConnection.ts`
-- `src/content/controller.test.ts`
+- `src/content/contentScript.ts`
+- `src/content/runtime.ts`
+- `src/injected/injectMain.ts`
 - `src/background/serviceWorker.ts`
 - `src/background/serviceWorker.test.ts`
+- `src/panel/actionContext.ts`
+- `src/panel/helpers.ts`
+- `src/panel/runtimeBridge.ts`
+- `src/panel/runtimeBridge.test.ts`
+- `src/panel/usePanelController.ts`
+- `src/panel/previewRuntime.ts`
+- `src/panel/actions.test.ts`
+- `src/panel/helpers.test.ts`
+- `src/content/runtime.test.ts`
+- `src/shared/messageTypes.ts`
+- `src/shared/global.d.ts`
+- `public/manifest.json`
 
 ## 5. 验证结果
 
-- `npm run test -- src/content/controller.test.ts src/background/serviceWorker.test.ts` 通过
+- `npm run test` 通过（49/49）
 - `npm run typecheck` 通过
 - `npm run build` 通过
 
 ## 6. 遗留事项
 
-- service worker 重启到 content script 重连之间仍存在极短窗口，但启动阶段的 `REQUEST_SNAPSHOT` 已改为回放缓存快照，不再向面板抛出误导性错误。
+- MV3 worker 仍会被 Chrome 回收，这是平台约束；本次修复解决的是“功能依赖它常驻”的问题，而不是试图阻止回收本身。
+- 若扩展在页面打开期间被手动重载，旧页面要等面板重新打开或用户执行一次命令后，background 才会触发重注入恢复监听。

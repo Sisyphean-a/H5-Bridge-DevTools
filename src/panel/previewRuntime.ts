@@ -1,20 +1,94 @@
+import type {
+  BridgePanelSnapshot,
+  BridgeStorageState,
+  OriginBridgeState,
+} from "../shared/bridgeTypes";
+import { STORAGE_KEY } from "../shared/constants";
 import { cloneJson } from "../shared/json";
 import type {
-  BackgroundToPanelMessage,
-  PanelPortMessage,
+  PanelCommandRequest,
+  PanelCommandResponse,
 } from "../shared/messageTypes";
 import { applyPreviewCommand, createPreviewSnapshot } from "./previewState";
 
-type PortListener = (message: BackgroundToPanelMessage) => void;
-type DisconnectListener = () => void;
+type StorageListener = (
+  changes: Record<string, chrome.storage.StorageChange>,
+  areaName: string,
+) => void;
+interface TabUpdateInfo {
+  status?: string;
+  url?: string;
+}
+type TabUpdatedListener = (
+  tabId: number,
+  changeInfo: TabUpdateInfo,
+  tab: chrome.tabs.Tab,
+) => void;
+type TabRemovedListener = (tabId: number) => void;
 
 let previewSnapshot = createPreviewSnapshot();
+const storageListeners = new Set<StorageListener>();
+const tabUpdatedListeners = new Set<TabUpdatedListener>();
+const tabRemovedListeners = new Set<TabRemovedListener>();
+let storageState = createPreviewStorageState(previewSnapshot);
 
 export function installPreviewChrome(): void {
   const runtime = {
-    connect() {
-      return createPort();
+    id: "preview-extension",
+    async sendMessage(message: PanelCommandRequest): Promise<PanelCommandResponse> {
+      if (message.type !== "PANEL_COMMAND") {
+        return { ok: false, message: "Unsupported preview message." };
+      }
+
+      const nextSnapshot = applyPreviewCommand(
+        previewSnapshot,
+        message.command,
+        (eventName, detail) => {
+          window.dispatchEvent(new CustomEvent(eventName, { detail }));
+        },
+      );
+
+      updatePreviewSnapshot(nextSnapshot);
+      return { ok: true };
     },
+  };
+
+  const tabs = {
+    async get(tabId: number) {
+      if (tabId !== 1) {
+        throw new Error(`Unknown preview tab: ${tabId}`);
+      }
+
+      return {
+        id: 1,
+        status: "complete",
+        url: previewSnapshot.href,
+      } as chrome.tabs.Tab;
+    },
+    onUpdated: createListenerApi(tabUpdatedListeners),
+    onRemoved: createListenerApi(tabRemovedListeners),
+  };
+
+  const storage = {
+    local: {
+      async get(key: string) {
+        return { [key]: cloneJson((storageState as Record<string, unknown>)[key]) };
+      },
+      async set(items: Record<string, unknown>) {
+        const changes: Record<string, chrome.storage.StorageChange> = {};
+        for (const [key, value] of Object.entries(items)) {
+          const previousValue = cloneJson((storageState as Record<string, unknown>)[key]);
+          (storageState as Record<string, unknown>)[key] = cloneJson(value);
+          changes[key] = {
+            oldValue: previousValue,
+            newValue: cloneJson(value),
+          };
+        }
+
+        storageListeners.forEach((listener) => listener(changes, "local"));
+      },
+    },
+    onChanged: createListenerApi(storageListeners),
   };
 
   const devtools = {
@@ -23,76 +97,61 @@ export function installPreviewChrome(): void {
 
   (globalThis as typeof globalThis & { chrome: typeof chrome }).chrome = {
     runtime,
+    tabs,
+    storage,
     devtools,
   } as unknown as typeof chrome;
 }
 
-function createPort(): chrome.runtime.Port {
-  const listeners = new Set<PortListener>();
-  const disconnectListeners = new Set<DisconnectListener>();
+function createPreviewStorageState(snapshot: BridgePanelSnapshot): {
+  [STORAGE_KEY]: BridgeStorageState;
+} {
+  const originState: OriginBridgeState = {
+    senders: cloneJson(snapshot.senders),
+    logs: cloneJson(snapshot.logs),
+    settings: { ...snapshot.settings },
+  };
 
   return {
-    name: "preview-port",
-    onMessage: {
-      addListener(listener) {
-        listeners.add(listener as PortListener);
+    [STORAGE_KEY]: {
+      globalEnabled: snapshot.globalEnabled,
+      origins: {
+        [snapshot.origin]: originState,
       },
-      removeListener(listener) {
-        listeners.delete(listener as PortListener);
-      },
-      hasListener(listener) {
-        return listeners.has(listener as PortListener);
-      },
-      hasListeners() {
-        return listeners.size > 0;
-      },
-    },
-    onDisconnect: {
-      addListener(listener) {
-        disconnectListeners.add(listener as DisconnectListener);
-      },
-      removeListener(listener) {
-        disconnectListeners.delete(listener as DisconnectListener);
-      },
-      hasListener(listener) {
-        return disconnectListeners.has(listener as DisconnectListener);
-      },
-      hasListeners() {
-        return disconnectListeners.size > 0;
-      },
-    },
-    postMessage(message: PanelPortMessage) {
-      handlePortMessage(message, listeners);
-    },
-    disconnect() {
-      disconnectListeners.forEach((listener) => listener());
-    },
-    sender: undefined,
-  } as chrome.runtime.Port;
-}
-
-function handlePortMessage(
-  message: PanelPortMessage,
-  listeners: Set<PortListener>,
-): void {
-  if (message.type === "PANEL_INIT") {
-    emitSnapshot(listeners);
-    return;
-  }
-
-  previewSnapshot = applyPreviewCommand(previewSnapshot, message.command, (eventName, detail) => {
-    window.dispatchEvent(new CustomEvent(eventName, { detail }));
-  });
-  emitSnapshot(listeners);
-}
-
-function emitSnapshot(listeners: Set<PortListener>): void {
-  const payload: BackgroundToPanelMessage = {
-    type: "BACKGROUND_EVENT",
-    event: {
-      type: "SNAPSHOT",
-      snapshot: cloneJson(previewSnapshot),
     },
   };
-  listeners.forEach((listener) => listener(payload));
+}
+
+function createListenerApi<TListener>(listeners: Set<TListener>) {
+  return {
+    addListener(listener: TListener) {
+      listeners.add(listener);
+    },
+    removeListener(listener: TListener) {
+      listeners.delete(listener);
+    },
+    hasListener(listener: TListener) {
+      return listeners.has(listener);
+    },
+    hasListeners() {
+      return listeners.size > 0;
+    },
+  };
+}
+
+function updatePreviewSnapshot(snapshot: BridgePanelSnapshot): void {
+  const previousState = cloneJson(storageState[STORAGE_KEY]);
+  previewSnapshot = snapshot;
+  storageState = createPreviewStorageState(snapshot);
+  storageListeners.forEach((listener) =>
+    listener(
+      {
+        [STORAGE_KEY]: {
+          oldValue: previousState,
+          newValue: cloneJson(storageState[STORAGE_KEY]),
+        },
+      },
+      "local",
+    ),
+  );
 }

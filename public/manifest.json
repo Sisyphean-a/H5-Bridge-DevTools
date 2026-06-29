@@ -3,7 +3,7 @@
   "name": "H5 桥接调试工具",
   "version": "0.1.0",
   "description": "一个用于模拟 H5 原生桥接调用的 Chrome 开发者工具扩展。",
-  "permissions": ["storage", "tabs"],
+  "permissions": ["storage", "tabs", "scripting"],
   "host_permissions": [
     "http://localhost/*",
     "http://localhost:*/*",

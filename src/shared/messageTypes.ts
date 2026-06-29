@@ -1,4 +1,3 @@
-import type { BridgePanelSnapshot } from "./bridgeTypes";
 import type { ImportStrategy, OriginBridgeSettings } from "./ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
 
@@ -18,22 +17,15 @@ export type PanelCommand =
   | { type: "MANUAL_EMIT"; eventName: string; detail: unknown }
   | { type: "REPLAY_LOG_RESPONSE"; logId: string };
 
-export type ContentEvent =
-  | { type: "SNAPSHOT"; snapshot: BridgePanelSnapshot }
-  | { type: "NOTICE"; level: "info" | "error"; message: string };
+export interface PanelCommandRequest {
+  type: "PANEL_COMMAND";
+  tabId: number;
+  command: PanelCommand;
+}
 
-export type PanelPortMessage =
-  | { type: "PANEL_INIT"; tabId: number }
-  | { type: "PANEL_COMMAND"; tabId: number; command: PanelCommand };
-
-export type ContentPortMessage =
-  | { type: "CONTENT_READY"; snapshot: BridgePanelSnapshot }
-  | { type: "CONTENT_EVENT"; event: ContentEvent };
-
-export type BackgroundToPanelMessage = {
-  type: "BACKGROUND_EVENT";
-  event: ContentEvent;
-};
+export type PanelCommandResponse =
+  | { ok: true }
+  | { ok: false; message: string };
 
 export type BackgroundToContentMessage = {
   type: "BACKGROUND_COMMAND";

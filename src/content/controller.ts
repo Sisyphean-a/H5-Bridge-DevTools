@@ -2,6 +2,7 @@ import { SOURCE_PAGE } from "../shared/constants";
 import type {
   PageBridgeCallMessage,
   PanelCommand,
+  PanelCommandResponse,
 } from "../shared/messageTypes";
 import { cloneJson } from "../shared/json";
 import {
@@ -10,15 +11,14 @@ import {
 } from "../shared/rules";
 import type { ImportStrategy, OriginBridgeSettings } from "../shared/ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
-import { bindContentRuntime, createContentRuntime } from "./portConnection";
 import {
   appendLog,
   dispatchToPage,
   initializeRuntime,
   mutateRuntime,
-  publishSnapshot,
   readEventName,
   syncRuntimeFromStorageChange,
+  type ContentRuntime,
   syncSettingsToPage,
   trimLogs,
 } from "./runtime";
@@ -33,25 +33,56 @@ import {
   upsertSenderState,
 } from "./senderState";
 
-const runtime = createContentRuntime();
+const runtime = createRuntime();
 
 export function bootstrapContentScript(): void {
-  bindContentRuntime(runtime, {
-    initialize,
-    onPortMessage(message) {
-      return handlePanelCommand(message.command);
-    },
-    onStorageChange(changes, areaName) {
-      return syncRuntimeFromStorageChange(runtime, changes, areaName);
-    },
-    onWindowMessage(event) {
-      return handlePageMessage(event);
-    },
-  });
+  runtime.ready = initialize().then(() => undefined);
+  chrome.runtime.onMessage.addListener(handleRuntimeMessage);
+  chrome.storage.onChanged.addListener(handleStorageChange);
+  window.addEventListener("message", handleWindowMessage);
 }
 
 async function initialize() {
   return initializeRuntime(runtime);
+}
+
+function createRuntime(): ContentRuntime {
+  return {
+    state: null,
+    ready: Promise.resolve(),
+    chain: Promise.resolve(),
+  };
+}
+
+function handleRuntimeMessage(
+  message: unknown,
+  _sender: chrome.runtime.MessageSender,
+  sendResponse: (response: PanelCommandResponse) => void,
+): boolean | void {
+  if (!isBackgroundCommandMessage(message)) {
+    return;
+  }
+
+  void runtime.ready
+    .then(async () => {
+      await handlePanelCommand(message.command);
+      sendResponse({ ok: true });
+    })
+    .catch((error: unknown) => {
+      sendResponse({ ok: false, message: toErrorMessage(error) });
+    });
+  return true;
+}
+
+function handleStorageChange(
+  changes: Record<string, chrome.storage.StorageChange>,
+  areaName: string,
+): void {
+  void runtime.ready.then(() => syncRuntimeFromStorageChange(runtime, changes, areaName));
+}
+
+function handleWindowMessage(event: MessageEvent<PageBridgeCallMessage>): void {
+  void runtime.ready.then(() => handlePageMessage(event));
 }
 
 async function handlePageMessage(
@@ -118,7 +149,6 @@ async function recordBridgeCall(message: PageBridgeCallMessage): Promise<void> {
 async function handlePanelCommand(command: PanelCommand): Promise<void> {
   switch (command.type) {
     case "REQUEST_SNAPSHOT":
-      publishSnapshot(runtime);
       return;
     case "UPSERT_SENDER":
       await upsertSender(command.sender);
@@ -312,4 +342,18 @@ async function updateSenders(
   await mutateRuntime(runtime, async (state) => {
     state.originState.senders = updater(state.originState.senders);
   });
+}
+
+function isBackgroundCommandMessage(
+  message: unknown,
+): message is { type: "BACKGROUND_COMMAND"; command: PanelCommand } {
+  return (
+    typeof message === "object" &&
+    message !== null &&
+    Reflect.get(message, "type") === "BACKGROUND_COMMAND"
+  );
+}
+
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "未知错误";
 }

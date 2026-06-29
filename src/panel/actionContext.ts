@@ -1,16 +1,16 @@
-import type { Dispatch, MutableRefObject, SetStateAction } from "react";
-import type { PanelCommand } from "../shared/messageTypes";
+import type { Dispatch, SetStateAction } from "react";
+import type { PanelCommand, PanelCommandRequest } from "../shared/messageTypes";
 import type { AppViewState, ToastState } from "./types";
 
 export interface PanelActionContext {
-  portRef: MutableRefObject<chrome.runtime.Port | null>;
+  dispatchRuntimeMessage: (message: PanelCommandRequest) => void;
   setState: Dispatch<SetStateAction<AppViewState>>;
   state: AppViewState;
   tabId: number;
 }
 
 export function postCommand(context: PanelActionContext, command: PanelCommand): void {
-  context.portRef.current?.postMessage({
+  context.dispatchRuntimeMessage({
     type: "PANEL_COMMAND",
     tabId: context.tabId,
     command,

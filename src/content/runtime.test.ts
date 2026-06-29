@@ -21,10 +21,6 @@ let storageListeners: Set<StorageListener>;
 
 function createRuntime(): ContentRuntime {
   return {
-    port: {
-      postMessage: vi.fn(),
-    } as unknown as chrome.runtime.Port,
-    portConnected: true,
     state: null,
     ready: Promise.resolve(),
     chain: Promise.resolve(),
@@ -94,19 +90,10 @@ describe("shared storage sync", () => {
     });
 
     const syncedSnapshot = getSnapshot(runtimeB);
-    const lastMessage = vi.mocked(runtimeB.port.postMessage).mock.calls.at(-1)?.[0] as
-      | { type: "CONTENT_EVENT"; event: { type: "SNAPSHOT"; snapshot: ReturnType<typeof getSnapshot> } }
-      | undefined;
 
     expect(syncedSnapshot.href).toBe(`${origin}/page-b`);
     expect(syncedSnapshot.senders.some((sender) => sender.id === sharedSender.id)).toBe(true);
     expect(syncedSnapshot.logs[0]?.event).toBe("openCamera");
-    expect(lastMessage?.type).toBe("CONTENT_EVENT");
-    expect(lastMessage?.event.type).toBe("SNAPSHOT");
-    expect(lastMessage?.event.snapshot.href).toBe(`${origin}/page-b`);
-    expect(lastMessage?.event.snapshot.senders.some((sender) => sender.id === sharedSender.id)).toBe(
-      true,
-    );
   });
 });
 

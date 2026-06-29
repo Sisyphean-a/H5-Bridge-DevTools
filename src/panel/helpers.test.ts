@@ -216,16 +216,16 @@ describe("syncSnapshotState", () => {
 });
 
 describe("panel runtime guards", () => {
-  it("只有 runtime id 和 connect 都存在时才允许重连", () => {
-    const connect = (() => {
+  it("只有 runtime id 和 sendMessage 都存在时才允许发消息", () => {
+    const sendMessage = (() => {
       throw new Error("not implemented");
-    }) as typeof chrome.runtime.connect;
+    }) as typeof chrome.runtime.sendMessage;
 
-    expect(hasActiveExtensionRuntime({ id: "ext-1", connect })).toBe(true);
+    expect(hasActiveExtensionRuntime({ id: "ext-1", sendMessage })).toBe(true);
     expect(hasActiveExtensionRuntime(undefined)).toBe(false);
     expect(hasActiveExtensionRuntime({ id: "ext-1" })).toBe(false);
-    expect(hasActiveExtensionRuntime({ connect })).toBe(false);
-    expect(hasActiveExtensionRuntime({ id: "", connect })).toBe(false);
+    expect(hasActiveExtensionRuntime({ sendMessage })).toBe(false);
+    expect(hasActiveExtensionRuntime({ id: "", sendMessage })).toBe(false);
   });
 
   it("会识别扩展上下文失效错误", () => {

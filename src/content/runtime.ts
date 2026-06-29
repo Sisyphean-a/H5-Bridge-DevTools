@@ -6,12 +6,7 @@ import type {
 } from "../shared/bridgeTypes";
 import { SOURCE_EXTENSION, STORAGE_KEY } from "../shared/constants";
 import { createId } from "../shared/id";
-import type {
-  ContentEvent,
-  ContentPortMessage,
-  PageDispatchMessage,
-  PageSettingsMessage,
-} from "../shared/messageTypes";
+import type { PageDispatchMessage, PageSettingsMessage } from "../shared/messageTypes";
 import { cloneJson } from "../shared/json";
 import { buildSnapshot, updateStorageState } from "../shared/storage";
 
@@ -23,8 +18,6 @@ export interface RuntimeState {
 }
 
 export interface ContentRuntime {
-  port: chrome.runtime.Port;
-  portConnected: boolean;
   state: RuntimeState | null;
   ready: Promise<void>;
   chain: Promise<unknown>;
@@ -64,19 +57,12 @@ export async function mutateRuntime(
   task: (state: RuntimeState) => Promise<void>,
 ): Promise<void> {
   runtime.chain = runtime.chain.then(async () => {
-    if (!runtime.state || !runtime.portConnected) {
+    if (!runtime.state) {
       return;
     }
 
     await task(runtime.state);
-    if (!runtime.portConnected) {
-      return;
-    }
     await persistRuntime(runtime);
-    if (!runtime.portConnected) {
-      return;
-    }
-    publishSnapshot(runtime);
   });
 
   await runtime.chain;
@@ -136,24 +122,16 @@ export function setRuntimeSnapshot(
   };
 }
 
-export function publishSnapshot(runtime: ContentRuntime): void {
-  postContentEvent(runtime, { type: "SNAPSHOT", snapshot: getSnapshot(runtime) });
-}
-
 export async function syncRuntimeFromStorageChange(
   runtime: ContentRuntime,
   changes: Record<string, chrome.storage.StorageChange>,
   areaName: string,
 ): Promise<boolean> {
-  if (!runtime.portConnected || areaName !== "local" || !changes[STORAGE_KEY]) {
+  if (areaName !== "local" || !changes[STORAGE_KEY]) {
     return false;
   }
 
   await reloadRuntimeSnapshot(runtime);
-  if (!runtime.portConnected) {
-    return false;
-  }
-  publishSnapshot(runtime);
   return true;
 }
 
@@ -193,26 +171,6 @@ export function readEventName(parsedMessage: unknown): string | undefined {
 
   const eventName = Reflect.get(parsedMessage, "event");
   return typeof eventName === "string" ? eventName : undefined;
-}
-
-export function postContentMessage(
-  runtime: ContentRuntime,
-  message: ContentPortMessage,
-): void {
-  if (!runtime.portConnected) {
-    return;
-  }
-  runtime.port.postMessage(message);
-}
-
-export function postContentEvent(
-  runtime: ContentRuntime,
-  event: ContentEvent,
-): void {
-  postContentMessage(runtime, {
-    type: "CONTENT_EVENT",
-    event,
-  });
 }
 
 async function persistRuntime(runtime: ContentRuntime): Promise<void> {

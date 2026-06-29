@@ -100,6 +100,12 @@ function handleExtensionMessage(event: MessageEvent<PageRuntimeMessage>): void {
 }
 
 function installAndroidBridgeMock(): void {
+  if (window.__H5_BRIDGE_INJECT_MAIN_INSTALLED__) {
+    syncBridgeBinding();
+    return;
+  }
+
+  window.__H5_BRIDGE_INJECT_MAIN_INSTALLED__ = true;
   if (originalBridge?.postMessage) {
     window.__H5_BRIDGE_ORIGINAL_ANDROID_BRIDGE__ = originalBridge;
   }

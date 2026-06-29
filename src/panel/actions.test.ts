@@ -46,14 +46,10 @@ function createState(
 function createHarness(initialState: AppViewState) {
   let state = initialState;
   const messages: unknown[] = [];
-  const port = {
-    postMessage(message: unknown) {
+  const context = {
+    dispatchRuntimeMessage(message: unknown) {
       messages.push(message);
     },
-  } as chrome.runtime.Port;
-
-  const context = {
-    portRef: { current: port },
     setState(updater) {
       state = typeof updater === "function" ? updater(state) : updater;
     },

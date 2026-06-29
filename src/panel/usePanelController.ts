@@ -1,17 +1,14 @@
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
   type Dispatch,
-  type MutableRefObject,
   type SetStateAction,
 } from "react";
 import type { BridgeLogItem } from "../shared/bridgeTypes";
-import type { BackgroundToPanelMessage } from "../shared/messageTypes";
 import { getPresetSenders } from "../shared/presets";
 import type { BridgeSender } from "../shared/senderTypes";
-import { type PanelActionContext, postCommand, setToast } from "./actionContext";
+import { type PanelActionContext, postCommand } from "./actionContext";
 import {
   countPairedSenders,
   countResponses,
@@ -23,12 +20,6 @@ import {
   findSender,
   type ResponseRecord,
 } from "./controllerFilters";
-import {
-  hasActiveExtensionRuntime,
-  isExtensionContextInvalidatedError,
-  requestSnapshot,
-  syncSnapshotState,
-} from "./helpers";
 import {
   buildRulesSubTabRoute,
   buildTabRoute,
@@ -54,6 +45,7 @@ import {
   setActiveResponse,
   triggerSelectedResponse,
 } from "./responseActions";
+import { usePanelRuntime } from "./runtimeBridge";
 import {
   addBlankSender,
   addPresetSender,
@@ -83,8 +75,6 @@ const initialState: AppViewState = {
   rulesSubTab: "matches",
   narrowDetailOpen: false,
 };
-
-const panelContextInvalidatedMessage = "扩展已重载，请关闭并重新打开 DevTools 面板。";
 
 export interface PanelController {
   state: AppViewState;
@@ -127,10 +117,9 @@ export interface PanelController {
 }
 
 export function usePanelController(tabId: number): PanelController {
-  const portRef = useRef<chrome.runtime.Port | null>(null);
   const presetSenders = useMemo(() => getPresetSenders(), []);
   const [state, setState] = useState<AppViewState>(initialState);
-  usePanelConnection(tabId, portRef, setState);
+  const dispatchRuntimeMessage = usePanelRuntime(tabId, setState);
   useToastDismiss(state.toast, setState);
 
   const senders = state.snapshot?.senders ?? [];
@@ -160,7 +149,7 @@ export function usePanelController(tabId: number): PanelController {
   );
   const responseCount = useMemo(() => countResponses(senders), [senders]);
   const pairedSenderCount = useMemo(() => countPairedSenders(senders), [senders]);
-  const context: PanelActionContext = { portRef, setState, state, tabId };
+  const context: PanelActionContext = { dispatchRuntimeMessage, setState, state, tabId };
 
   return {
     state,
@@ -202,93 +191,9 @@ export function usePanelController(tabId: number): PanelController {
     formatManualEmitDraft: () => formatManualEmitDraft(context),
     exportRules: () => exportRules(context),
     importRules: (content) => importRules(context, content),
-    copyText: (text) => copyText(context, text),
+    copyText: (text: string) => copyText(context, text),
     goBack: () => setState((current) => navigateBackState(current)),
   };
-}
-
-function usePanelConnection(
-  tabId: number,
-  portRef: MutableRefObject<chrome.runtime.Port | null>,
-  setState: Dispatch<SetStateAction<AppViewState>>,
-): void {
-  useEffect(() => {
-    let disposed = false;
-    let reconnectTimer: number | null = null;
-
-    const connect = () => {
-      if (disposed) {
-        return;
-      }
-
-      const runtime = chrome.runtime;
-      if (!hasActiveExtensionRuntime(runtime)) {
-        setToast({ setState }, "error", panelContextInvalidatedMessage);
-        return;
-      }
-
-      let port: chrome.runtime.Port;
-      try {
-        port = runtime.connect({ name: "h5-bridge-panel" });
-      } catch (error) {
-        if (isExtensionContextInvalidatedError(error)) {
-          setToast({ setState }, "error", panelContextInvalidatedMessage);
-          return;
-        }
-        throw error;
-      }
-      portRef.current = port;
-      port.postMessage({ type: "PANEL_INIT", tabId });
-
-      const handleMessage = (message: BackgroundToPanelMessage) => {
-        if (message.type !== "BACKGROUND_EVENT") {
-          return;
-        }
-
-        const event = message.event;
-        if (event.type === "SNAPSHOT") {
-          setState((current) => syncSnapshotState(current, event.snapshot));
-          return;
-        }
-
-        setState((current) => ({
-          ...current,
-          toast: {
-            level: event.level,
-            message: event.message,
-          },
-        }));
-      };
-
-      const handleDisconnect = () => {
-        port.onMessage.removeListener(handleMessage);
-        port.onDisconnect.removeListener(handleDisconnect);
-        if (portRef.current === port) {
-          portRef.current = null;
-        }
-        if (disposed) {
-          return;
-        }
-        reconnectTimer = window.setTimeout(connect, 60);
-      };
-
-      port.onMessage.addListener(handleMessage);
-      port.onDisconnect.addListener(handleDisconnect);
-      requestSnapshot(port, tabId);
-    };
-
-    connect();
-
-    return () => {
-      disposed = true;
-      if (reconnectTimer !== null) {
-        window.clearTimeout(reconnectTimer);
-      }
-      const port = portRef.current;
-      portRef.current = null;
-      port?.disconnect();
-    };
-  }, [tabId, portRef, setState]);
 }
 
 function useToastDismiss(

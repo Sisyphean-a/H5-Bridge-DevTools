@@ -1,171 +1,121 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSnapshot } from "../test/factories";
 import type {
   BackgroundToContentMessage,
-  BackgroundToPanelMessage,
-  ContentPortMessage,
-  PanelPortMessage,
+  PanelCommandRequest,
+  PanelCommandResponse,
 } from "../shared/messageTypes";
 
-type Listener<T> = (payload: T) => void;
+type RuntimeMessageListener = (
+  message: unknown,
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (response: PanelCommandResponse) => void,
+) => boolean | void;
 
-describe("serviceWorker bridge routing", () => {
+describe("serviceWorker command routing", () => {
   beforeEach(() => {
     vi.resetModules();
   });
 
-  it("panel 初始化后会收到同 tab 已缓存的最新快照", async () => {
+  it("会通过 tabs.sendMessage 将面板命令转发给当前 tab", async () => {
     const harness = await loadServiceWorkerHarness();
-    const snapshot = createSnapshot({ href: "https://example.com/page-a" });
-    const contentPort = createMockPort<ContentPortMessage>("h5-bridge-content", 7);
-    const panelPort = createMockPort<PanelPortMessage>("h5-bridge-panel");
 
-    harness.connect(contentPort.port);
-    contentPort.emitMessage({ type: "CONTENT_READY", snapshot });
-    harness.connect(panelPort.port);
-    panelPort.emitMessage({ type: "PANEL_INIT", tabId: 7 });
-
-    expect(panelPort.messages).toEqual([
-      {
-        type: "BACKGROUND_EVENT",
-        event: { type: "SNAPSHOT", snapshot },
-      },
-    ]);
-  });
-
-  it("content script 推送 SNAPSHOT 时会实时转发给已打开的 panel", async () => {
-    const harness = await loadServiceWorkerHarness();
-    const contentPort = createMockPort<ContentPortMessage>("h5-bridge-content", 7);
-    const panelPort = createMockPort<PanelPortMessage>("h5-bridge-panel");
-    const snapshot = createSnapshot({ href: "https://example.com/page-b" });
-
-    harness.connect(contentPort.port);
-    harness.connect(panelPort.port);
-    panelPort.emitMessage({ type: "PANEL_INIT", tabId: 7 });
-    panelPort.messages.length = 0;
-    contentPort.emitMessage({
-      type: "CONTENT_EVENT",
-      event: { type: "SNAPSHOT", snapshot },
+    const response = await harness.dispatch({
+      type: "PANEL_COMMAND",
+      tabId: 7,
+      command: { type: "CLEAR_LOGS" },
     });
 
-    expect(panelPort.messages).toEqual([
-      {
-        type: "BACKGROUND_EVENT",
-        event: { type: "SNAPSHOT", snapshot },
-      },
-    ]);
+    expect(harness.sendMessage).toHaveBeenCalledWith(7, {
+      type: "BACKGROUND_COMMAND",
+      command: { type: "CLEAR_LOGS" },
+    } satisfies BackgroundToContentMessage);
+    expect(response).toEqual({ ok: true });
+    expect(harness.executeScript).not.toHaveBeenCalled();
   });
 
-  it("请求快照时若 content script 尚未重连则回放缓存快照而不是报错", async () => {
+  it("收件端缺失时会重注入脚本后重试命令", async () => {
     const harness = await loadServiceWorkerHarness();
-    const snapshot = createSnapshot({ href: "https://example.com/page-c" });
-    const contentPort = createMockPort<ContentPortMessage>("h5-bridge-content", 7);
-    const panelPort = createMockPort<PanelPortMessage>("h5-bridge-panel");
+    harness.sendMessage.mockRejectedValueOnce(
+      new Error("Could not establish connection. Receiving end does not exist."),
+    );
 
-    harness.connect(contentPort.port);
-    contentPort.emitMessage({ type: "CONTENT_READY", snapshot });
-    harness.connect(panelPort.port);
-    panelPort.emitMessage({ type: "PANEL_INIT", tabId: 7 });
-    panelPort.messages.length = 0;
-    contentPort.port.disconnect();
-    panelPort.emitMessage({
+    const response = await harness.dispatch({
       type: "PANEL_COMMAND",
       tabId: 7,
       command: { type: "REQUEST_SNAPSHOT" },
     });
 
-    expect(panelPort.messages).toEqual([
-      {
-        type: "BACKGROUND_EVENT",
-        event: { type: "SNAPSHOT", snapshot },
-      },
-    ]);
+    expect(harness.executeScript).toHaveBeenNthCalledWith(1, {
+      target: { tabId: 7 },
+      files: ["injected/injectMain.js"],
+      world: "MAIN",
+    });
+    expect(harness.executeScript).toHaveBeenNthCalledWith(2, {
+      target: { tabId: 7 },
+      files: ["content/contentScript.js"],
+    });
+    expect(harness.sendMessage).toHaveBeenCalledTimes(2);
+    expect(response).toEqual({ ok: true });
+  });
+
+  it("注入失败时会把错误透传给面板", async () => {
+    const harness = await loadServiceWorkerHarness();
+    harness.sendMessage.mockRejectedValueOnce(
+      new Error("Could not establish connection. Receiving end does not exist."),
+    );
+    harness.executeScript.mockRejectedValueOnce(new Error("Cannot access this page"));
+
+    const response = await harness.dispatch({
+      type: "PANEL_COMMAND",
+      tabId: 7,
+      command: { type: "MANUAL_EMIT", eventName: "toLogin", detail: { ok: true } },
+    });
+
+    expect(response).toEqual({
+      ok: false,
+      message: "Cannot access this page",
+    });
   });
 });
 
 async function loadServiceWorkerHarness(): Promise<{
-  connect: (port: chrome.runtime.Port) => void;
+  dispatch: (message: PanelCommandRequest) => Promise<PanelCommandResponse>;
+  executeScript: ReturnType<typeof vi.fn>;
+  sendMessage: ReturnType<typeof vi.fn>;
 }> {
-  let connectListener: Listener<chrome.runtime.Port> | null = null;
+  let runtimeMessageListener: RuntimeMessageListener | null = null;
+  const sendMessage = vi.fn(() => Promise.resolve({ ok: true }));
+  const executeScript = vi.fn(() => Promise.resolve([]));
 
   (globalThis as typeof globalThis & { chrome: typeof chrome }).chrome = {
     runtime: {
-      onConnect: {
-        addListener(listener: Listener<chrome.runtime.Port>) {
-          connectListener = listener;
+      onMessage: {
+        addListener(listener: RuntimeMessageListener) {
+          runtimeMessageListener = listener;
         },
       },
+    },
+    scripting: {
+      executeScript,
+    },
+    tabs: {
+      sendMessage,
     },
   } as unknown as typeof chrome;
 
   await import("./serviceWorker");
 
-  if (!connectListener) {
-    throw new Error("serviceWorker did not register onConnect listener");
+  if (!runtimeMessageListener) {
+    throw new Error("serviceWorker did not register runtime.onMessage listener");
   }
 
   return {
-    connect(port) {
-      connectListener?.(port);
+    dispatch(message) {
+      return new Promise((resolve) => {
+        runtimeMessageListener?.(message, {} as chrome.runtime.MessageSender, resolve);
+      });
     },
-  };
-}
-
-function createMockPort<TMessage extends ContentPortMessage | PanelPortMessage>(
-  name: string,
-  tabId?: number,
-): {
-  port: chrome.runtime.Port;
-  messages: Array<BackgroundToPanelMessage | BackgroundToContentMessage>;
-  emitMessage: (message: TMessage) => void;
-} {
-  const messageListeners = new Set<Listener<TMessage>>();
-  const disconnectListeners = new Set<Listener<chrome.runtime.Port>>();
-  const messages: Array<BackgroundToPanelMessage | BackgroundToContentMessage> = [];
-  const port = {
-    name,
-    sender: tabId == null ? undefined : ({ tab: { id: tabId } } as chrome.runtime.MessageSender),
-    onMessage: {
-      addListener(listener: Listener<TMessage>) {
-        messageListeners.add(listener);
-      },
-      removeListener(listener: Listener<TMessage>) {
-        messageListeners.delete(listener);
-      },
-      hasListener(listener: Listener<TMessage>) {
-        return messageListeners.has(listener);
-      },
-      hasListeners() {
-        return messageListeners.size > 0;
-      },
-    },
-    onDisconnect: {
-      addListener(listener: Listener<chrome.runtime.Port>) {
-        disconnectListeners.add(listener);
-      },
-      removeListener(listener: Listener<chrome.runtime.Port>) {
-        disconnectListeners.delete(listener);
-      },
-      hasListener(listener: Listener<chrome.runtime.Port>) {
-        return disconnectListeners.has(listener);
-      },
-      hasListeners() {
-        return disconnectListeners.size > 0;
-      },
-    },
-    postMessage(message: BackgroundToPanelMessage | BackgroundToContentMessage) {
-      messages.push(message);
-    },
-    disconnect() {
-      disconnectListeners.forEach((listener) => listener(port as chrome.runtime.Port));
-    },
-  } as chrome.runtime.Port;
-
-  return {
-    port,
-    messages,
-    emitMessage(message) {
-      messageListeners.forEach((listener) => listener(message));
-    },
+    executeScript,
+    sendMessage,
   };
 }
