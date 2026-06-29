@@ -1,11 +1,18 @@
 import type { BridgeLogItem } from "../shared/bridgeTypes";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
+import {
+  getResponseOwnerLabel,
+  isStandaloneSender,
+  isVisibleSender,
+} from "../shared/standaloneSender";
 import type { SelectedResponseRef } from "./types";
 
 export interface ResponseRecord {
   sender: BridgeSender;
   response: BridgeResponseOption;
   isActive: boolean;
+  isStandalone: boolean;
+  ownerLabel: string;
 }
 
 export function filterLogs(logs: BridgeLogItem[], activeEvent: string | null): BridgeLogItem[] {
@@ -16,11 +23,12 @@ export function filterLogs(logs: BridgeLogItem[], activeEvent: string | null): B
 }
 
 export function filterSenders(senders: BridgeSender[], keyword: string): BridgeSender[] {
+  const visibleSenders = senders.filter(isVisibleSender);
   const normalized = keyword.trim().toLowerCase();
   if (!normalized) {
-    return senders;
+    return visibleSenders;
   }
-  return senders.filter((sender) => matchesSender(sender, normalized));
+  return visibleSenders.filter((sender) => matchesSender(sender, normalized));
 }
 
 export function filterResponseRecords(senders: BridgeSender[], keyword: string): ResponseRecord[] {
@@ -33,11 +41,12 @@ export function filterResponseRecords(senders: BridgeSender[], keyword: string):
 }
 
 export function filterMatchSenders(senders: BridgeSender[], keyword: string): BridgeSender[] {
+  const visibleSenders = senders.filter(isVisibleSender);
   const normalized = keyword.trim().toLowerCase();
   if (!normalized) {
-    return senders;
+    return visibleSenders;
   }
-  return senders.filter((sender) => {
+  return visibleSenders.filter((sender) => {
     if (matchesSender(sender, normalized)) {
       return true;
     }
@@ -50,7 +59,7 @@ export function countResponses(senders: BridgeSender[]): number {
 }
 
 export function countPairedSenders(senders: BridgeSender[]): number {
-  return senders.filter((sender) => Boolean(sender.activeResponseId)).length;
+  return senders.filter((sender) => isVisibleSender(sender) && Boolean(sender.activeResponseId)).length;
 }
 
 export function findSender(senders: BridgeSender[], senderId: string | null): BridgeSender | null {
@@ -76,6 +85,8 @@ export function findResponseRecord(
     sender,
     response,
     isActive: sender.activeResponseId === response.id,
+    isStandalone: isStandaloneSender(sender),
+    ownerLabel: getResponseOwnerLabel(sender),
   };
 }
 
@@ -85,6 +96,8 @@ function flattenResponses(senders: BridgeSender[]): ResponseRecord[] {
       sender,
       response,
       isActive: sender.activeResponseId === response.id,
+      isStandalone: isStandaloneSender(sender),
+      ownerLabel: getResponseOwnerLabel(sender),
     })),
   );
 }
@@ -98,6 +111,7 @@ function matchesSender(sender: BridgeSender, keyword: string): boolean {
 
 function matchesResponse(record: ResponseRecord, keyword: string): boolean {
   return (
+    record.ownerLabel.toLowerCase().includes(keyword) ||
     record.sender.name.toLowerCase().includes(keyword) ||
     record.sender.matchEvent.toLowerCase().includes(keyword) ||
     matchesResponseText(record.response, keyword)

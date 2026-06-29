@@ -6,7 +6,10 @@ import { Badge, EmptyState, PaneHeader, SearchField } from "./RulesShared";
 export function SendersListPane({ controller }: { controller: PanelController }) {
   return (
     <section className="workspace-pane">
-      <PaneHeader title="发送列表" subtitle={`共 ${controller.filteredSenders.length} 条发送`} />
+      <PaneHeader
+        title="H5 -> 安卓"
+        subtitle={`共 ${controller.filteredSenders.length} 条 H5 发送`}
+      />
       <div className="workspace-pane__body is-list">
         <div className="stack workspace-section">
           <div className="search-row">
@@ -15,7 +18,7 @@ export function SendersListPane({ controller }: { controller: PanelController })
               onChange={(value) =>
                 controller.setState((current) => ({ ...current, filterText: value }))
               }
-              placeholder="按名称或事件名搜索发送"
+              placeholder="按名称或事件名搜索 H5 发送"
             />
             <button
               type="button"
@@ -30,8 +33,8 @@ export function SendersListPane({ controller }: { controller: PanelController })
         <div className="stack">
           {controller.filteredSenders.length === 0 ? (
             <EmptyState
-              title="暂无发送"
-              description="添加发送后即可开始匹配桥接事件。"
+              title="暂无 H5 发送"
+              description="添加 H5 发送后即可开始匹配桥接事件。"
             />
           ) : (
             controller.filteredSenders.map((sender) => (
@@ -57,7 +60,7 @@ function PresetSelect({ controller }: { controller: PanelController }) {
         event.target.value = "";
       }}
     >
-      <option value="">从模板创建发送</option>
+      <option value="">从模板创建 H5 发送</option>
       {controller.presetSenders.map((sender) => (
         <option key={sender.id} value={sender.id}>
           {sender.name}
@@ -91,9 +94,9 @@ function SenderRow({
         </div>
         <div className="row-card__aside">
           <Badge tone={hasActiveResponse ? "green" : "red"}>
-            {hasActiveResponse ? "自动响应中" : "未关联响应"}
+            {hasActiveResponse ? "自动回传中" : "未关联回传"}
           </Badge>
-          <Badge tone="blue">{sender.responses.length} 响应</Badge>
+          <Badge tone="blue">{sender.responses.length} 条安卓发送</Badge>
           {activeResponse ? <Badge tone="orange">{activeResponse.delayMs}ms</Badge> : null}
         </div>
       </div>

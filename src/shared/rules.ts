@@ -4,6 +4,7 @@ import { createId } from "./id";
 import { createBlankSender } from "./presets";
 import type { ImportStrategy } from "./ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
+import { isStandaloneSender } from "./standaloneSender";
 
 type LegacyBridgeSender = BridgeSender & {
   enabled?: boolean;
@@ -15,7 +16,10 @@ export function findMatchingSender(
   eventName: string,
 ): BridgeSender | undefined {
   return senders.find(
-    (sender) => sender.matchEvent === eventName && Boolean(getActiveResponse(sender)),
+    (sender) =>
+      !isStandaloneSender(sender) &&
+      sender.matchEvent === eventName &&
+      Boolean(getActiveResponse(sender)),
   );
 }
 

@@ -1,4 +1,10 @@
 import { useEffect, useState } from "react";
+import type { BridgeSender } from "../../../shared/senderTypes";
+import {
+  STANDALONE_RESPONSE_TARGET_LABEL,
+  STANDALONE_SENDER_ID,
+  isVisibleSender,
+} from "../../../shared/standaloneSender";
 import { ResponseDetailPane } from "./ResponseDetailPane";
 import type { PanelController } from "../../usePanelController";
 import { Badge, EmptyState, PaneHeader, SearchField, StatusDot } from "./RulesShared";
@@ -30,21 +36,23 @@ export function ResponsesView({
 }
 
 function ResponsesListPane({ controller }: { controller: PanelController }) {
-  const [targetSenderId, setTargetSenderId] = useState(controller.state.selectedSenderId ?? "");
-  const candidateSenders = controller.state.snapshot?.senders ?? [];
+  const candidateSenders = (controller.state.snapshot?.senders ?? []).filter(isVisibleSender);
+  const [targetSenderId, setTargetSenderId] = useState(() =>
+    getDefaultTargetSenderId(controller.state.selectedSenderId, candidateSenders),
+  );
 
   useEffect(() => {
-    if (candidateSenders.some((sender) => sender.id === targetSenderId)) {
+    if (canTargetSender(targetSenderId, candidateSenders)) {
       return;
     }
-    setTargetSenderId(controller.state.selectedSenderId ?? candidateSenders[0]?.id ?? "");
+    setTargetSenderId(getDefaultTargetSenderId(controller.state.selectedSenderId, candidateSenders));
   }, [candidateSenders, controller.state.selectedSenderId, targetSenderId]);
 
   return (
     <section className="workspace-pane">
       <PaneHeader
-        title="响应列表"
-        subtitle={`共 ${controller.responseCount} 个响应`}
+        title="安卓 -> H5"
+        subtitle={`共 ${controller.responseCount} 条安卓发送`}
       />
       <div className="workspace-pane__body is-list">
         <div className="stack workspace-section">
@@ -54,46 +62,36 @@ function ResponsesListPane({ controller }: { controller: PanelController }) {
               onChange={(value) =>
                 controller.setState((current) => ({ ...current, filterText: value }))
               }
-              placeholder="按响应名、发送名或事件名搜索"
+              placeholder="按消息名、归属或事件名搜索"
             />
             <button
               type="button"
               className="control-button control-button--primary"
               onClick={() => controller.createResponseForSender(targetSenderId)}
-              disabled={!targetSenderId}
             >
               新建
             </button>
           </div>
-          <select
-            className="control-select"
-            value={targetSenderId}
-            onChange={(event) => setTargetSenderId(event.target.value)}
-          >
-            {candidateSenders.length === 0 ? (
-              <option value="">暂无发送可挂载</option>
-            ) : (
-              candidateSenders.map((sender) => (
-                <option key={sender.id} value={sender.id}>
-                  添加到: {sender.name}
-                </option>
-              ))
-            )}
-          </select>
+          <ResponseTargetSelect
+            targetSenderId={targetSenderId}
+            candidateSenders={candidateSenders}
+            onChange={setTargetSenderId}
+          />
         </div>
         <div className="stack">
           {controller.filteredResponses.length === 0 ? (
             <EmptyState
-              title="暂无响应"
-              description="选择发送后可新建响应。"
+              title="暂无安卓发送"
+              description="可新建挂载发送，或创建独立安卓发送。"
             />
           ) : (
             controller.filteredResponses.map((record) => {
               const isSelected =
-                controller.state.selectedResponse?.responseId === record.response.id;
+                controller.state.selectedResponse?.senderId === record.sender.id &&
+                controller.state.selectedResponse.responseId === record.response.id;
               return (
                 <button
-                  key={record.response.id}
+                  key={`${record.sender.id}:${record.response.id}`}
                   type="button"
                   className={`row-card${isSelected ? " is-selected" : ""}`}
                   onClick={() =>
@@ -101,16 +99,20 @@ function ResponsesListPane({ controller }: { controller: PanelController }) {
                   }
                 >
                   <div className="row-card__top">
-                    <StatusDot active={record.isActive} />
+                    {record.isStandalone ? (
+                      <Badge tone="blue">独立</Badge>
+                    ) : (
+                      <StatusDot active={record.isActive} />
+                    )}
                     <div className="row-card__content">
                       <p className="row-card__title">{record.response.name}</p>
-                      <p className="row-card__subtitle">{record.sender.name}</p>
+                      <p className="row-card__subtitle">{record.ownerLabel}</p>
                       <p className="row-card__subtitle mono">
                         {record.response.eventName || "(空事件名)"}
                       </p>
                     </div>
                     <div className="row-card__aside">
-                      {record.isActive ? <Badge tone="green">活跃</Badge> : null}
+                      {record.isActive && !record.isStandalone ? <Badge tone="green">自动回传</Badge> : null}
                       <Badge tone="orange">{record.response.delayMs}ms</Badge>
                     </div>
                   </div>
@@ -122,4 +124,45 @@ function ResponsesListPane({ controller }: { controller: PanelController }) {
       </div>
     </section>
   );
+}
+
+function ResponseTargetSelect({
+  targetSenderId,
+  candidateSenders,
+  onChange,
+}: {
+  targetSenderId: string;
+  candidateSenders: BridgeSender[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <select
+      className="control-select"
+      value={targetSenderId}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value={STANDALONE_SENDER_ID}>{STANDALONE_RESPONSE_TARGET_LABEL}</option>
+      {candidateSenders.map((sender) => (
+        <option key={sender.id} value={sender.id}>
+          挂载到: {sender.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function getDefaultTargetSenderId(
+  selectedSenderId: string | null,
+  candidateSenders: BridgeSender[],
+): string {
+  return candidateSenders.some((sender) => sender.id === selectedSenderId)
+    ? selectedSenderId!
+    : STANDALONE_SENDER_ID;
+}
+
+function canTargetSender(
+  senderId: string,
+  candidateSenders: BridgeSender[],
+): boolean {
+  return senderId === STANDALONE_SENDER_ID || candidateSenders.some((sender) => sender.id === senderId);
 }

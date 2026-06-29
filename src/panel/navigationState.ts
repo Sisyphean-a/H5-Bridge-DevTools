@@ -395,6 +395,14 @@ function applyRouteProjection(
   if (record) {
     return openResponseState(current, record.sender, record.response, "responses");
   }
+  if (canOpenResponseDetail(current.snapshot, current, route.senderId, route.responseId)) {
+    return {
+      ...current,
+      activeTab: "rules",
+      rulesSubTab: "responses",
+      narrowDetailOpen: true,
+    };
+  }
 
   return {
     ...current,

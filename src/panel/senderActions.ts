@@ -2,6 +2,7 @@ import type { BridgeLogItem } from "../shared/bridgeTypes";
 import { createBlankSender, getPresetSenderById } from "../shared/presets";
 import { createSenderFromLog, findEquivalentResponseIndex, validateSender } from "../shared/rules";
 import type { BridgeSender } from "../shared/senderTypes";
+import { isStandaloneSender } from "../shared/standaloneSender";
 import {
   buildResponseDetailRoute,
   buildRulesSubTabRoute,
@@ -20,7 +21,7 @@ import type { SenderDraft } from "./types";
 
 export function selectSender(context: PanelActionContext, senderId: string): void {
   const sender = findSender(context.state.snapshot?.senders ?? [], senderId);
-  if (!sender) {
+  if (!sender || isStandaloneSender(sender)) {
     return;
   }
   context.setState((current) => {
@@ -34,7 +35,7 @@ export function selectSender(context: PanelActionContext, senderId: string): voi
 
 export function openSenderTab(context: PanelActionContext, senderId: string): void {
   const sender = findSender(context.state.snapshot?.senders ?? [], senderId);
-  if (!sender) {
+  if (!sender || isStandaloneSender(sender)) {
     return;
   }
   context.setState((current) => {

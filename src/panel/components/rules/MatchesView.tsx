@@ -6,7 +6,10 @@ import { Badge, EmptyState, PaneHeader, SearchField, StatusDot } from "./RulesSh
 export function MatchesView({ controller }: { controller: PanelController }) {
   return (
     <section className="workspace-pane">
-      <PaneHeader title="匹配关系" subtitle={`共 ${controller.filteredMatchSenders.length} 条发送`} />
+      <PaneHeader
+        title="自动配对"
+        subtitle={`共 ${controller.filteredMatchSenders.length} 条 H5 发送`}
+      />
       <div className="workspace-pane__body">
         <div className="workspace-section">
           <SearchField
@@ -14,14 +17,14 @@ export function MatchesView({ controller }: { controller: PanelController }) {
             onChange={(value) =>
               controller.setState((current) => ({ ...current, filterText: value }))
             }
-            placeholder="按发送、响应或事件名搜索匹配关系"
+            placeholder="按 H5 发送、安卓发送或事件名搜索配对"
           />
         </div>
         <div className="stack match-list">
           {controller.filteredMatchSenders.length === 0 ? (
             <EmptyState
-              title="暂无匹配关系"
-              description="添加发送和响应后会显示在这里。"
+              title="暂无自动配对"
+              description="添加 H5 发送和自动回传后会显示在这里。"
             />
           ) : (
             controller.filteredMatchSenders.map((sender) => (
@@ -132,13 +135,13 @@ function EmptyResponses({
 }) {
   return (
     <div className="match-card__empty">
-      <span className="row-card__subtitle">暂无响应候选</span>
+      <span className="row-card__subtitle">暂无自动回传候选</span>
       <button
         type="button"
         className="control-button control-button--primary control-button--quiet"
         onClick={() => controller.createResponseForSender(senderId)}
       >
-        添加响应
+        添加回传
       </button>
     </div>
   );
@@ -178,7 +181,7 @@ function MatchResponseRow({
           className="control-button control-button--primary control-button--quiet"
           onClick={() => controller.setActiveResponse(senderId, response.id)}
         >
-          切为活跃
+          设为自动回传
         </button>
       ) : null}
     </div>

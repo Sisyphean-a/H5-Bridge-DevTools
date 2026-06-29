@@ -5,9 +5,9 @@ import { ResponsesView } from "./rules/ResponsesView";
 import { SendersView } from "./rules/SendersView";
 
 const subTabs: Array<{ id: RulesSubTab; label: string }> = [
-  { id: "matches", label: "匹配" },
-  { id: "senders", label: "发送" },
-  { id: "responses", label: "响应" },
+  { id: "matches", label: "自动配对" },
+  { id: "senders", label: "H5 -> 安卓" },
+  { id: "responses", label: "安卓 -> H5" },
 ];
 
 export function RuleWorkspace({

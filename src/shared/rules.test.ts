@@ -6,6 +6,7 @@ import {
   normalizeSenders,
 } from "./rules";
 import { createResponse, createSender } from "../test/factories";
+import { createStandaloneSender } from "./standaloneSender";
 
 describe("shared rules behavior", () => {
   it("findEquivalentResponseIndex 会在 id 不同的情况下按响应签名匹配", () => {
@@ -97,5 +98,17 @@ describe("shared rules behavior", () => {
 
     expect(findMatchingSender([disabledByUnpair], "login")).toBeUndefined();
     expect(findMatchingSender([disabledByUnpair, active], "login")?.id).toBe("sender-b");
+  });
+
+  it("findMatchingSender 会跳过独立安卓发送容器", () => {
+    const standalone = createStandaloneSender([createResponse("resp-standalone")]);
+    const active = createSender("sender-b", {
+      matchEvent: "login",
+    });
+
+    standalone.matchEvent = "login";
+    standalone.activeResponseId = standalone.responses[0]?.id ?? null;
+
+    expect(findMatchingSender([standalone, active], "login")?.id).toBe("sender-b");
   });
 });

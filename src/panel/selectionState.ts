@@ -1,4 +1,5 @@
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
+import { isStandaloneSender } from "../shared/standaloneSender";
 import type { AppViewState } from "./types";
 import { createResponseDraft, createSenderDraft } from "./utils";
 
@@ -40,10 +41,12 @@ export function openResponseState(
   response: BridgeResponseOption,
   rulesSubTab: AppViewState["rulesSubTab"] = "responses",
 ): AppViewState {
+  const baseState = isStandaloneSender(sender) ? current : selectSenderState(current, sender);
   return {
-    ...selectSenderState(current, sender),
+    ...baseState,
     activeTab: "rules",
     rulesSubTab,
+    narrowDetailOpen: true,
     selectedResponse: { senderId: sender.id, responseId: response.id },
     responseDraft: createResponseDraft(sender.id, response),
   };

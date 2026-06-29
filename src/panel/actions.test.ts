@@ -17,6 +17,7 @@ import type { AppViewState } from "./types";
 import { createResponseDraft, createSenderDraft } from "./utils";
 import { createResponse, createSender, createSnapshot } from "../test/factories";
 import type { BridgeLogItem } from "../shared/bridgeTypes";
+import { STANDALONE_SENDER_ID } from "../shared/standaloneSender";
 
 function createState(
   overrides: Partial<AppViewState> = {},
@@ -174,6 +175,36 @@ describe("panel action flows", () => {
     });
   });
 
+  it("createResponseForSender 支持创建不跟踪 H5 发送的独立安卓发送", () => {
+    const harness = createHarness(createState());
+
+    createResponseForSender(harness.context, STANDALONE_SENDER_ID);
+
+    const messages = harness.messages as Array<{
+      type: "PANEL_COMMAND";
+      tabId: number;
+      command: { type: string; sender?: { id: string; responses: Array<{ id: string }> } };
+    }>;
+    const createdResponseId = messages[0]?.command.sender?.responses[0]?.id;
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      type: "PANEL_COMMAND",
+      tabId: 7,
+      command: {
+        type: "UPSERT_SENDER",
+        sender: { id: STANDALONE_SENDER_ID },
+      },
+    });
+    expect(createdResponseId).toBeTruthy();
+    expect(harness.getState().selectedSenderId).toBeNull();
+    expect(harness.getState().senderDraft).toBeNull();
+    expect(harness.getState().selectedResponse).toEqual({
+      senderId: STANDALONE_SENDER_ID,
+      responseId: createdResponseId,
+    });
+  });
+
   it("deleteResponse 会切到同 sender 的下一个响应", () => {
     const first = createResponse("resp-1", { name: "响应一" });
     const second = createResponse("resp-2", { name: "响应二" });
@@ -214,6 +245,54 @@ describe("panel action flows", () => {
     expect(harness.getState().navigation.current).toEqual(
       buildResponseDetailRoute(sender.id, second.id),
     );
+  });
+
+  it("deleteResponse 删除最后一条独立安卓发送时会清理隐藏容器", () => {
+    const response = createResponse("resp-1", { name: "原生返回" });
+    const sender = createSender(STANDALONE_SENDER_ID, {
+      name: "独立安卓发送",
+      matchEvent: "__android-standalone-emit__",
+      responses: [response],
+      activeResponseId: null,
+      lastActiveResponseId: response.id,
+    });
+    const harness = createHarness(
+      createState({
+        snapshot: createSnapshot({ senders: [sender] }),
+        navigation: {
+          current: buildResponseDetailRoute(sender.id, response.id),
+          history: [{ tab: "rules", rulesSubTab: "responses", detail: "list" }],
+        },
+        selectedResponse: { senderId: sender.id, responseId: response.id },
+        responseDraft: createResponseDraft(sender.id, response),
+        rulesSubTab: "responses",
+      }),
+    );
+
+    deleteResponse(harness.context);
+
+    expect(harness.messages).toEqual([
+      {
+        type: "PANEL_COMMAND",
+        tabId: 7,
+        command: {
+          type: "DELETE_RESPONSE",
+          senderId: sender.id,
+          responseId: response.id,
+        },
+      },
+      {
+        type: "PANEL_COMMAND",
+        tabId: 7,
+        command: {
+          type: "DELETE_SENDER",
+          senderId: sender.id,
+        },
+      },
+    ]);
+    expect(harness.getState().selectedResponse).toBeNull();
+    expect(harness.getState().responseDraft).toBeNull();
+    expect(harness.getState().navigation.current).toEqual(buildRulesSubTabRoute("responses"));
   });
 
   it("saveResponse 遇到非法 JSON 会保留本地状态并提示错误", () => {

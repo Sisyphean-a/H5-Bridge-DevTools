@@ -1,4 +1,8 @@
 import type { PanelController } from "../../usePanelController";
+import {
+  STANDALONE_RESPONSE_TARGET_LABEL,
+  getResponseOwnerLabel,
+} from "../../../shared/standaloneSender";
 import { ResponseImageTools } from "./ResponseImageTools";
 import {
   Badge,
@@ -29,8 +33,8 @@ export function ResponseDetailPane({
     <section className="workspace-pane">
       <PaneHeader
         compact={compact}
-        title={compact ? draft.name || "响应编辑" : "响应编辑器"}
-        subtitle={record.sender.name}
+        title={compact ? draft.name || "安卓发送编辑" : "安卓发送编辑器"}
+        subtitle={record.ownerLabel}
         extra={compact ? <BackToListButton onClick={controller.goBack} /> : null}
       />
       <div className="workspace-pane__body">
@@ -46,9 +50,9 @@ export function ResponseDetailPane({
 function EmptyResponseDetail() {
   return (
     <section className="workspace-pane">
-      <PaneHeader title="响应编辑器" subtitle="选择一条响应进行编辑" />
+      <PaneHeader title="安卓发送编辑器" subtitle="选择一条安卓发送进行编辑" />
       <div className="workspace-pane__body">
-        <EmptyState title="未选择响应" description="从左侧列表选择响应。" />
+        <EmptyState title="未选择安卓发送" description="从左侧列表选择一条安卓发送。" />
       </div>
     </section>
   );
@@ -78,7 +82,7 @@ function ResponseEditorHeader({
   return (
     <div className="response-editor-header workspace-section">
       <section className="response-main-row">
-        <InlineField label="响应名称" kind="name">
+        <InlineField label="消息名称" kind="name">
           <input
             className="control-field"
             value={draft.name}
@@ -101,18 +105,14 @@ function ResponseEditorHeader({
         </InlineField>
       </section>
       <section className="response-context-row">
-        <InlineField label="所属发送" kind="sender">
-          <button
-            type="button"
-            className="link-button response-meta__link"
-            onClick={() => controller.openSenderTab(record.sender.id)}
-          >
-            {record.sender.name}
-          </button>
+        <InlineField label="归属" kind="sender">
+          <ResponseOwnerControl controller={controller} record={record} />
         </InlineField>
-        <InlineField label="活跃状态" kind="status">
-          <ResponseActiveControl controller={controller} record={record} />
-        </InlineField>
+        {record.isStandalone ? null : (
+          <InlineField label="自动配对" kind="status">
+            <ResponseActiveControl controller={controller} record={record} />
+          </InlineField>
+        )}
       </section>
     </div>
   );
@@ -146,20 +146,42 @@ function ResponseActiveControl({
     <div className="response-meta__status">
       <span className="response-meta__status-text">
         <StatusDot active={record.isActive} />
-        {record.isActive ? "当前活跃响应" : "当前未活跃"}
+        {record.isActive ? "当前自动回传" : "当前未自动回传"}
       </span>
       {record.isActive ? (
-        <Badge tone="green">活跃</Badge>
+        <Badge tone="green">自动回传</Badge>
       ) : (
         <button
           type="button"
           className="control-button control-button--quiet"
           onClick={() => controller.setActiveResponse(record.sender.id, record.response.id)}
         >
-          设为活跃
+          设为自动回传
         </button>
       )}
     </div>
+  );
+}
+
+function ResponseOwnerControl({
+  controller,
+  record,
+}: {
+  controller: PanelController;
+  record: ResponseRecord;
+}) {
+  if (record.isStandalone) {
+    return <span className="row-card__subtitle">{STANDALONE_RESPONSE_TARGET_LABEL}</span>;
+  }
+
+  return (
+    <button
+      type="button"
+      className="link-button response-meta__link"
+      onClick={() => controller.openSenderTab(record.sender.id)}
+    >
+      {getResponseOwnerLabel(record.sender)}
+    </button>
   );
 }
 
@@ -204,7 +226,7 @@ function ResponseFooter({
             className="control-button control-button--primary"
             onClick={controller.saveResponse}
           >
-            保存响应
+            保存发送
           </button>
           <button
             type="button"
@@ -226,13 +248,13 @@ function ResponseFooter({
         </>
       }
       danger={
-        <button
-          type="button"
-          className="control-button control-button--danger"
-          onClick={() => confirmDelete(record.response.name, controller)}
-        >
-          删除响应
-        </button>
+          <button
+            type="button"
+            className="control-button control-button--danger"
+            onClick={() => confirmDelete(record.response.name, controller)}
+          >
+            删除发送
+          </button>
       }
     />
   );
@@ -246,7 +268,7 @@ function patchResponseDraft(controller: PanelController, patch: Partial<Response
 }
 
 function confirmDelete(name: string, controller: PanelController) {
-  if (window.confirm(`确认删除响应“${name}”？`)) {
+  if (window.confirm(`确认删除安卓发送“${name}”？`)) {
     controller.deleteResponse();
   }
 }

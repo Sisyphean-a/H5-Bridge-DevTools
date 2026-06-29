@@ -4,6 +4,7 @@ import { buildResponseDetailRoute } from "../../navigationState";
 import { createResponseDraft } from "../../utils";
 import type { PanelController } from "../../usePanelController";
 import { createResponse, createSender } from "../../../test/factories";
+import { createStandaloneSender } from "../../../shared/standaloneSender";
 import { ResponsesView } from "./ResponsesView";
 
 function createController(): PanelController {
@@ -29,6 +30,8 @@ function createController(): PanelController {
       sender,
       response,
       isActive: true,
+      isStandalone: false,
+      ownerLabel: sender.name,
     },
   } as unknown as PanelController;
 }
@@ -44,5 +47,47 @@ describe("ResponsesView", () => {
     expect(markup).not.toContain("图片格式");
     expect(markup).not.toContain("选择图片");
     expect(markup).not.toContain("插入图片");
+  });
+
+  it("列表模式会提供独立安卓发送入口", () => {
+    const regular = createSender("sender-1", { name: "登录发送" });
+    const standalone = createStandaloneSender([
+      createResponse("resp-2", { name: "系统返回", eventName: "nativeBack" }),
+    ]);
+    const markup = renderToStaticMarkup(
+      <ResponsesView
+        controller={
+          {
+            state: {
+              snapshot: { senders: [regular, standalone] },
+              selectedSenderId: null,
+              selectedResponse: null,
+              responseDraft: null,
+              filterText: "",
+              narrowDetailOpen: false,
+            },
+            setState: vi.fn(),
+            responseCount: 2,
+            filteredSenders: [regular],
+            filteredResponses: [
+              {
+                sender: standalone,
+                response: standalone.responses[0],
+                isActive: false,
+                isStandalone: true,
+                ownerLabel: "独立发送",
+              },
+            ],
+            createResponseForSender: vi.fn(),
+            selectResponse: vi.fn(),
+          } as unknown as PanelController
+        }
+        isWide
+      />,
+    );
+
+    expect(markup).toContain("独立发送（不跟踪 H5 -&gt; 安卓）");
+    expect(markup).toContain("独立发送");
+    expect(markup).toContain("系统返回");
   });
 });

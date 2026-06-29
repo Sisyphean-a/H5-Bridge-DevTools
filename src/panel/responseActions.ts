@@ -3,6 +3,11 @@ import { safeParseJson } from "../shared/json";
 import { validateResponse } from "../shared/rules";
 import type { BridgeResponseOption } from "../shared/senderTypes";
 import {
+  createStandaloneSender,
+  isStandaloneSender,
+  isStandaloneSenderId,
+} from "../shared/standaloneSender";
+import {
   buildResponseDetailRoute,
   pushRouteState,
   buildRulesSubTabRoute,
@@ -38,18 +43,27 @@ export function selectResponse(
 
 export function createResponseForSender(context: PanelActionContext, senderId: string): void {
   const sender = findSender(context.state.snapshot?.senders ?? [], senderId);
-  if (!sender) {
+  if (!sender && !isStandaloneSenderId(senderId)) {
     setToast(context, "error", "请先选择一个发送");
     return;
   }
   const response = createBlankResponse();
-  postCommand(context, { type: "UPSERT_RESPONSE", senderId, response });
-  if (sender.responses.length === 0 || !sender.activeResponseId) {
+  const targetSender = sender ?? createStandaloneSender([response]);
+  if (sender) {
+    postCommand(context, { type: "UPSERT_RESPONSE", senderId, response });
+  } else {
+    postCommand(context, { type: "UPSERT_SENDER", sender: targetSender });
+  }
+  if (
+    sender &&
+    !isStandaloneSender(sender) &&
+    (sender.responses.length === 0 || !sender.activeResponseId)
+  ) {
     postCommand(context, { type: "SET_ACTIVE_RESPONSE", senderId, responseId: response.id });
   }
   context.setState((current) => {
-    const next = openResponseState(current, sender, response);
-    const route = buildResponseDetailRoute(sender.id, response.id);
+    const next = openResponseState(current, targetSender, response);
+    const route = buildResponseDetailRoute(targetSender.id, response.id);
     return shouldReplaceDetailRoute(current, route)
       ? replaceRouteState(next, route)
       : pushRouteState(next, route);
@@ -92,6 +106,12 @@ export function deleteResponse(context: PanelActionContext): void {
     senderId: record.sender.id,
     responseId: record.response.id,
   });
+  if (record.isStandalone && !nextResponse) {
+    postCommand(context, {
+      type: "DELETE_SENDER",
+      senderId: record.sender.id,
+    });
+  }
   context.setState((current) => {
     const next = {
       ...current,
