@@ -6,6 +6,7 @@ import {
   type SetStateAction,
 } from "react";
 import type { BridgeLogItem } from "../shared/bridgeTypes";
+import { DEFAULT_BRIDGE_PROFILE_ID } from "../shared/bridgeProfiles";
 import { getPresetSenders } from "../shared/presets";
 import type { BridgeSender } from "../shared/senderTypes";
 import { type PanelActionContext, postCommand } from "./actionContext";
@@ -117,10 +118,11 @@ export interface PanelController {
 }
 
 export function usePanelController(tabId: number): PanelController {
-  const presetSenders = useMemo(() => getPresetSenders(), []);
   const [state, setState] = useState<AppViewState>(initialState);
   const dispatchRuntimeMessage = usePanelRuntime(tabId, setState);
   useToastDismiss(state.toast, setState);
+  const activeProfileId = state.snapshot?.activeProfileId ?? DEFAULT_BRIDGE_PROFILE_ID;
+  const presetSenders = useMemo(() => getPresetSenders(activeProfileId), [activeProfileId]);
 
   const senders = state.snapshot?.senders ?? [];
   const filteredSenders = useMemo(

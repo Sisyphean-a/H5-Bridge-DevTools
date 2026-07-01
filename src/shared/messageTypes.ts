@@ -1,8 +1,10 @@
 import type { ImportStrategy, OriginBridgeSettings } from "./ruleTypes";
+import type { BridgeProfileId } from "./bridgeProfiles";
 import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
 
 export type PanelCommand =
   | { type: "REQUEST_SNAPSHOT" }
+  | { type: "SET_ACTIVE_PROFILE"; profileId: BridgeProfileId }
   | { type: "UPSERT_SENDER"; sender: BridgeSender }
   | { type: "DELETE_SENDER"; senderId: string }
   | { type: "DUPLICATE_SENDER"; senderId: string }
@@ -55,7 +57,8 @@ export interface PageSettingsMessage {
   type: "SYNC_SETTINGS";
   payload: {
     globalEnabled: boolean;
-    overrideExistingAndroidBridge: boolean;
+    profileId: BridgeProfileId;
+    overrideExistingBridge: boolean;
   };
 }
 

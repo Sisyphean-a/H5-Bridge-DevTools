@@ -54,7 +54,11 @@ export function addBlankSender(context: PanelActionContext): void {
 }
 
 export function addPresetSender(context: PanelActionContext, presetId: string): void {
-  const sender = getPresetSenderById(presetId);
+  const profileId = context.state.snapshot?.activeProfileId;
+  if (!profileId) {
+    return;
+  }
+  const sender = getPresetSenderById(profileId, presetId);
   if (!sender) {
     return;
   }

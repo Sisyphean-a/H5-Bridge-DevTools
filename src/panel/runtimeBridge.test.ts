@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { STORAGE_KEY } from "../shared/constants";
+import { createDefaultOriginState } from "../shared/storage";
 import { createSender } from "../test/factories";
 import { loadSnapshotForTab } from "./runtimeBridge";
 
@@ -7,20 +8,13 @@ const origin = "https://example.com";
 let storageBucket: Record<string, unknown>;
 
 beforeEach(() => {
+  const originState = createDefaultOriginState();
+  originState.profiles.pkg01.senders = [createSender("sender-1", { name: "登录发送" })];
   storageBucket = {
     [STORAGE_KEY]: {
       globalEnabled: true,
       origins: {
-        [origin]: {
-          senders: [createSender("sender-1", { name: "登录发送" })],
-          logs: [],
-          settings: {
-            autoMock: true,
-            preserveLogs: false,
-            maxLogCount: 200,
-            overrideExistingAndroidBridge: true,
-          },
-        },
+        [origin]: originState,
       },
     },
   };

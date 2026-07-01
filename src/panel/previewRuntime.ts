@@ -1,7 +1,8 @@
 import type {
   BridgePanelSnapshot,
   BridgeStorageState,
-  OriginBridgeState,
+  OriginBridgeProfileState,
+  OriginScopedBridgeState,
 } from "../shared/bridgeTypes";
 import { STORAGE_KEY } from "../shared/constants";
 import { cloneJson } from "../shared/json";
@@ -9,6 +10,7 @@ import type {
   PanelCommandRequest,
   PanelCommandResponse,
 } from "../shared/messageTypes";
+import { createDefaultOriginState } from "../shared/storage";
 import { applyPreviewCommand, createPreviewSnapshot } from "./previewState";
 
 type StorageListener = (
@@ -43,7 +45,7 @@ export function installPreviewChrome(): void {
       const nextSnapshot = applyPreviewCommand(
         previewSnapshot,
         message.command,
-        (eventName, detail) => {
+        (eventName: string, detail: unknown) => {
           window.dispatchEvent(new CustomEvent(eventName, { detail }));
         },
       );
@@ -106,11 +108,14 @@ export function installPreviewChrome(): void {
 function createPreviewStorageState(snapshot: BridgePanelSnapshot): {
   [STORAGE_KEY]: BridgeStorageState;
 } {
-  const originState: OriginBridgeState = {
+  const originState: OriginScopedBridgeState = createDefaultOriginState();
+  const activeProfileState: OriginBridgeProfileState = {
     senders: cloneJson(snapshot.senders),
     logs: cloneJson(snapshot.logs),
     settings: { ...snapshot.settings },
   };
+  originState.activeProfileId = snapshot.activeProfileId;
+  originState.profiles[snapshot.activeProfileId] = activeProfileState;
 
   return {
     [STORAGE_KEY]: {

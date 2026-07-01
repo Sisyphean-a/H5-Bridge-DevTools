@@ -7,20 +7,21 @@ export function syncSnapshotState(
   current: AppViewState,
   snapshot: BridgePanelSnapshot,
 ): AppViewState {
-  const senderState = syncSenderDraft(current, snapshot);
-  const responseState = syncResponseDraft(current, snapshot);
+  const baseCurrent = createSnapshotBaseState(current, snapshot);
+  const senderState = syncSenderDraft(baseCurrent, snapshot);
+  const responseState = syncResponseDraft(baseCurrent, snapshot);
   const toast = buildRemoteUpdateToast(senderState, responseState);
 
   const next = {
-    ...current,
+    ...baseCurrent,
     snapshot,
     selectedSenderId: senderState.selectedSenderId,
     senderDraft: senderState.senderDraft,
     selectedResponse: responseState.selectedResponse,
     responseDraft: responseState.responseDraft,
-    toast: toast ?? current.toast,
+    toast: toast ?? baseCurrent.toast,
   };
-  return syncNavigationSnapshotState(current, next);
+  return syncNavigationSnapshotState(baseCurrent, next);
 }
 
 function syncSenderDraft(
@@ -134,6 +135,27 @@ function buildRemoteUpdateToast(
     };
   }
   return null;
+}
+
+function createSnapshotBaseState(
+  current: AppViewState,
+  snapshot: BridgePanelSnapshot,
+): AppViewState {
+  const profileChanged =
+    current.snapshot !== null &&
+    current.snapshot.activeProfileId !== snapshot.activeProfileId;
+  if (!profileChanged) {
+    return current;
+  }
+
+  return {
+    ...current,
+    selectedSenderId: null,
+    senderDraft: null,
+    selectedResponse: null,
+    responseDraft: null,
+    activeLogEvent: null,
+  };
 }
 
 function didSenderChange(previous: SenderDraft | null, next: SenderDraft): boolean {

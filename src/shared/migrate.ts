@@ -1,14 +1,24 @@
-import type { BridgeLogItem, BridgeStorageState, OriginBridgeState } from "./bridgeTypes";
+import type {
+  BridgeLogItem,
+  BridgeStorageState,
+  OriginBridgeProfileState,
+  OriginScopedBridgeState,
+} from "./bridgeTypes";
+import { getPresetSenders } from "./presets";
 import { createId } from "./id";
 import { cloneJson } from "./json";
 import { normalizeSenders } from "./rules";
 import type { BridgeMockRule, OriginBridgeSettings } from "./ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
 
+type LegacyOriginBridgeSettings = Partial<OriginBridgeSettings> & {
+  overrideExistingAndroidBridge?: boolean;
+};
+
 interface LegacyOriginBridgeState {
   rules: BridgeMockRule[];
   logs: BridgeLogItem[];
-  settings: OriginBridgeSettings;
+  settings: LegacyOriginBridgeSettings;
 }
 
 export interface LegacyStorageState {
@@ -38,11 +48,36 @@ export function migrateRuleToSender(rule: BridgeMockRule): BridgeSender {
   };
 }
 
-function migrateOriginState(state: LegacyOriginBridgeState): OriginBridgeState {
-  return {
+function migrateOriginState(state: LegacyOriginBridgeState): OriginScopedBridgeState {
+  const pkg01State: OriginBridgeProfileState = {
     senders: normalizeSenders((state.rules ?? []).map(migrateRuleToSender)),
     logs: cloneJson(state.logs ?? []),
-    settings: { ...state.settings },
+    settings: {
+      autoMock: state.settings?.autoMock ?? true,
+      preserveLogs: state.settings?.preserveLogs ?? false,
+      maxLogCount: state.settings?.maxLogCount ?? 200,
+      overrideExistingBridge:
+        state.settings?.overrideExistingBridge ??
+        state.settings?.overrideExistingAndroidBridge ??
+        true,
+    },
+  };
+
+  return {
+    activeProfileId: "pkg01",
+    profiles: {
+      pkg01: pkg01State,
+      pkg03: {
+        senders: getPresetSenders("pkg03"),
+        logs: [],
+        settings: {
+          autoMock: true,
+          preserveLogs: false,
+          maxLogCount: 200,
+          overrideExistingBridge: true,
+        },
+      },
+    },
   };
 }
 

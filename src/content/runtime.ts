@@ -2,19 +2,25 @@ import type {
   BridgeLogItem,
   BridgePanelSnapshot,
   BridgeStorageState,
-  OriginBridgeState,
+  OriginBridgeProfileState,
+  OriginScopedBridgeState,
 } from "../shared/bridgeTypes";
+import { getBridgeProfile, type BridgeProfileId } from "../shared/bridgeProfiles";
 import { SOURCE_EXTENSION, STORAGE_KEY } from "../shared/constants";
 import { createId } from "../shared/id";
 import type { PageDispatchMessage, PageSettingsMessage } from "../shared/messageTypes";
 import { cloneJson } from "../shared/json";
-import { buildSnapshot, updateStorageState } from "../shared/storage";
+import {
+  createDefaultOriginState,
+  readOriginScopedState,
+  updateStorageState,
+} from "../shared/storage";
 
 export interface RuntimeState {
   origin: string;
   href: string;
   globalEnabled: boolean;
-  originState: OriginBridgeState;
+  originState: OriginScopedBridgeState;
 }
 
 export interface ContentRuntime {
@@ -28,10 +34,22 @@ export async function initializeRuntime(
 ): Promise<BridgePanelSnapshot> {
   const href = window.location.href;
   const origin = window.location.origin;
-  const snapshot = await buildSnapshot(origin, href);
-  setRuntimeSnapshot(runtime, snapshot, snapshot.settings.preserveLogs);
+  const { globalEnabled, originState } = await readOriginScopedState(origin);
+  runtime.state = {
+    origin,
+    href,
+    globalEnabled,
+    originState,
+  };
+  const profileState = getActiveProfileState(runtime.state);
+  const preserveLogs = profileState.settings.preserveLogs;
+  const hasLogs = profileState.logs.length > 0;
 
-  if (!snapshot.settings.preserveLogs && snapshot.logs.length > 0) {
+  if (!preserveLogs) {
+    profileState.logs = [];
+  }
+
+  if (!preserveLogs && hasLogs) {
     await persistRuntime(runtime);
   }
 
@@ -46,8 +64,13 @@ export async function reloadRuntimeSnapshot(
     throw new Error("Runtime state is not initialized.");
   }
 
-  const snapshot = await buildSnapshot(runtime.state.origin, runtime.state.href);
-  setRuntimeSnapshot(runtime, snapshot, true);
+  const { globalEnabled, originState } = await readOriginScopedState(runtime.state.origin);
+  runtime.state = {
+    origin: runtime.state.origin,
+    href: runtime.state.href,
+    globalEnabled,
+    originState,
+  };
   syncSettingsToPage(runtime);
   return getSnapshot(runtime);
 }
@@ -72,15 +95,16 @@ export function appendLog(
   state: RuntimeState,
   input: Omit<BridgeLogItem, "id" | "timestamp">,
 ): BridgeLogItem[] {
+  const profileState = getActiveProfileState(state);
   const nextLogs = [
     {
       id: createId("log"),
       timestamp: Date.now(),
       ...input,
     },
-    ...state.originState.logs,
+    ...profileState.logs,
   ];
-  return trimLogs(nextLogs, state.originState.settings.maxLogCount);
+  return trimLogs(nextLogs, profileState.settings.maxLogCount);
 }
 
 export function trimLogs(
@@ -99,9 +123,10 @@ export function getSnapshot(runtime: ContentRuntime): BridgePanelSnapshot {
     origin: runtime.state.origin,
     href: runtime.state.href,
     globalEnabled: runtime.state.globalEnabled,
-    senders: cloneJson(runtime.state.originState.senders),
-    logs: cloneJson(runtime.state.originState.logs),
-    settings: { ...runtime.state.originState.settings },
+    activeProfileId: runtime.state.originState.activeProfileId,
+    senders: cloneJson(getActiveProfileState(runtime.state).senders),
+    logs: cloneJson(getActiveProfileState(runtime.state).logs),
+    settings: { ...getActiveProfileState(runtime.state).settings },
   };
 }
 
@@ -114,11 +139,7 @@ export function setRuntimeSnapshot(
     origin: snapshot.origin,
     href: snapshot.href,
     globalEnabled: snapshot.globalEnabled,
-    originState: {
-      senders: cloneJson(snapshot.senders),
-      logs: includeLogs ? cloneJson(snapshot.logs) : [],
-      settings: { ...snapshot.settings },
-    },
+    originState: mergeSnapshotIntoOriginState(snapshot, includeLogs, runtime.state?.originState),
   };
 }
 
@@ -145,8 +166,8 @@ export function syncSettingsToPage(runtime: ContentRuntime): void {
     type: "SYNC_SETTINGS",
     payload: {
       globalEnabled: runtime.state.globalEnabled,
-      overrideExistingAndroidBridge:
-        runtime.state.originState.settings.overrideExistingAndroidBridge,
+      profileId: runtime.state.originState.activeProfileId,
+      overrideExistingBridge: getActiveProfileState(runtime.state).settings.overrideExistingBridge,
     },
   };
   window.postMessage(payload, "*");
@@ -187,4 +208,40 @@ async function persistRuntime(runtime: ContentRuntime): Promise<void> {
       [activeState.origin]: cloneJson(activeState.originState),
     },
   }));
+}
+
+export function setActiveProfile(
+  state: RuntimeState,
+  profileId: BridgeProfileId,
+): void {
+  state.originState.activeProfileId = getBridgeProfile(profileId).id;
+}
+
+export function getActiveProfileState(
+  state: RuntimeState,
+): OriginBridgeProfileState {
+  return state.originState.profiles[state.originState.activeProfileId];
+}
+
+function mergeSnapshotIntoOriginState(
+  snapshot: BridgePanelSnapshot,
+  includeLogs: boolean,
+  previousState: OriginScopedBridgeState | undefined,
+): OriginScopedBridgeState {
+  const baseState = previousState
+    ? cloneJson(previousState)
+    : createDefaultOriginState();
+  const nextProfileState: OriginBridgeProfileState = {
+    senders: cloneJson(snapshot.senders),
+    logs: includeLogs ? cloneJson(snapshot.logs) : [],
+    settings: { ...snapshot.settings },
+  };
+  return {
+    ...baseState,
+    activeProfileId: snapshot.activeProfileId,
+    profiles: {
+      ...baseState.profiles,
+      [snapshot.activeProfileId]: nextProfileState,
+    },
+  };
 }

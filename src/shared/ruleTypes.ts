@@ -25,7 +25,7 @@ export interface OriginBridgeSettings {
   autoMock: boolean;
   preserveLogs: boolean;
   maxLogCount: number;
-  overrideExistingAndroidBridge: boolean;
+  overrideExistingBridge: boolean;
 }
 
 export interface RuleExportPayload {

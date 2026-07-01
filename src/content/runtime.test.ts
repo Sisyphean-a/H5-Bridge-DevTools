@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createSender, createSnapshot } from "../test/factories";
 import {
   appendLog,
+  getActiveProfileState,
   getSnapshot,
   initializeRuntime,
   mutateRuntime,
@@ -43,13 +44,13 @@ describe("setRuntimeSnapshot", () => {
         autoMock: true,
         preserveLogs: false,
         maxLogCount: 200,
-        overrideExistingAndroidBridge: true,
+        overrideExistingBridge: true,
       },
     });
 
     setRuntimeSnapshot(runtime, snapshot, false);
 
-    expect(runtime.state?.originState.logs).toEqual([]);
+    expect(runtime.state && getActiveProfileState(runtime.state).logs).toEqual([]);
   });
 
   it("实时同步时会保留共享日志", () => {
@@ -60,7 +61,7 @@ describe("setRuntimeSnapshot", () => {
 
     setRuntimeSnapshot(runtime, snapshot, true);
 
-    expect(runtime.state?.originState.logs).toEqual(snapshot.logs);
+    expect(runtime.state && getActiveProfileState(runtime.state).logs).toEqual(snapshot.logs);
   });
 });
 
@@ -81,8 +82,9 @@ describe("shared storage sync", () => {
 
     const sharedSender = createSender("sender-shared", { name: "跨页新增发送" });
     await mutateRuntime(runtimeA, async (state) => {
-      state.originState.senders = [...state.originState.senders, sharedSender];
-      state.originState.logs = appendLog(state, {
+      const profileState = getActiveProfileState(state);
+      profileState.senders = [...profileState.senders, sharedSender];
+      profileState.logs = appendLog(state, {
         type: "SEND",
         event: "openCamera",
         payload: { success: true },

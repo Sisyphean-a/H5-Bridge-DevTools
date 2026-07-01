@@ -1,4 +1,8 @@
 import type { BridgeLogItem, BridgeLogType, BridgePanelSnapshot } from "../shared/bridgeTypes";
+import {
+  DEFAULT_BRIDGE_PROFILE_ID,
+  type BridgeProfileId,
+} from "../shared/bridgeProfiles";
 import { cloneJson } from "../shared/json";
 import type { PanelCommand } from "../shared/messageTypes";
 import { createBlankSender, getPresetSenders } from "../shared/presets";
@@ -15,11 +19,13 @@ const previewSettings: OriginBridgeSettings = {
   autoMock: true,
   preserveLogs: true,
   maxLogCount: 200,
-  overrideExistingAndroidBridge: true,
+  overrideExistingBridge: true,
 };
 
-export function createPreviewSnapshot(): BridgePanelSnapshot {
-  const senders = getPresetSenders().slice(0, 3);
+export function createPreviewSnapshot(
+  profileId: BridgeProfileId = DEFAULT_BRIDGE_PROFILE_ID,
+): BridgePanelSnapshot {
+  const senders = getPresetSenders(profileId).slice(0, 3);
   const extraSender = createBlankSender();
   extraSender.name = "获取用户信息";
   extraSender.matchEvent = "getUserInfo";
@@ -31,8 +37,9 @@ export function createPreviewSnapshot(): BridgePanelSnapshot {
     origin: "https://preview.local",
     href: "https://preview.local/devtools",
     globalEnabled: true,
+    activeProfileId: profileId,
     senders: [...senders, extraSender],
-    logs: createPreviewLogs(),
+    logs: createPreviewLogs(profileId),
     settings: { ...previewSettings },
   };
 }
@@ -45,6 +52,8 @@ export function applyPreviewCommand(
   switch (command.type) {
     case "REQUEST_SNAPSHOT":
       return snapshot;
+    case "SET_ACTIVE_PROFILE":
+      return switchPreviewProfile(snapshot, command.profileId);
     case "UPSERT_SENDER":
       return { ...snapshot, senders: upsertSender(snapshot.senders, command.sender) };
     case "DELETE_SENDER":
@@ -126,6 +135,21 @@ export function applyPreviewCommand(
   }
 }
 
+function switchPreviewProfile(
+  snapshot: BridgePanelSnapshot,
+  profileId: BridgeProfileId,
+): BridgePanelSnapshot {
+  const next = createPreviewSnapshot(profileId);
+  return {
+    ...next,
+    globalEnabled: snapshot.globalEnabled,
+    settings: {
+      ...next.settings,
+      ...snapshot.settings,
+    },
+  };
+}
+
 function triggerPreviewResponse(
   snapshot: BridgePanelSnapshot,
   senderId: string,
@@ -198,15 +222,20 @@ function applyPreviewResponseUpsert(
   };
 }
 
-function createPreviewLogs(): BridgeLogItem[] {
+function createPreviewLogs(profileId: BridgeProfileId): BridgeLogItem[] {
+  const loginEvent = profileId === "pkg03" ? "requestLogin" : "toLogin";
+  const successDetail =
+    profileId === "pkg03"
+      ? { result: true, token: "mock-token-003" }
+      : { success: true, token: "mock-token-001" };
   return [
-    createLogItem("SEND", "toLogin", {
+    createLogItem("SEND", loginEvent, {
       timestamp: Date.now() - 32_000,
-      payload: { event: "toLogin", detail: { mobile: "138****0000" } },
+      payload: { event: loginEvent, detail: { mobile: "138****0000" } },
     }),
-    createLogItem("MOCK", "toLogin", {
+    createLogItem("MOCK", loginEvent, {
       timestamp: Date.now() - 31_500,
-      response: { success: true, token: "mock-token-001" },
+      response: successDetail,
     }),
     createLogItem("WARN", "getUserInfo", {
       timestamp: Date.now() - 15_000,

@@ -1,22 +1,22 @@
 import { SOURCE_PAGE } from "../shared/constants";
+import type { BridgeProfileId } from "../shared/bridgeProfiles";
 import type {
   PageBridgeCallMessage,
   PanelCommand,
   PanelCommandResponse,
 } from "../shared/messageTypes";
 import { cloneJson } from "../shared/json";
-import {
-  findMatchingSender,
-  getActiveResponse,
-} from "../shared/rules";
+import { findMatchingSender, getActiveResponse } from "../shared/rules";
 import type { ImportStrategy, OriginBridgeSettings } from "../shared/ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
 import {
   appendLog,
   dispatchToPage,
+  getActiveProfileState,
   initializeRuntime,
   mutateRuntime,
   readEventName,
+  setActiveProfile,
   syncRuntimeFromStorageChange,
   type ContentRuntime,
   syncSettingsToPage,
@@ -107,7 +107,7 @@ async function recordBridgeCall(message: PageBridgeCallMessage): Promise<void> {
   const payload = parsed ?? message.payload.rawMessage;
 
   await mutateRuntime(runtime, async (state) => {
-    state.originState.logs = appendLog(state, {
+    getActiveProfileState(state).logs = appendLog(state, {
       type: "SEND",
       event: eventName,
       payload,
@@ -118,11 +118,11 @@ async function recordBridgeCall(message: PageBridgeCallMessage): Promise<void> {
     await pushError("Bridge message has no event field.", payload);
     return;
   }
-  if (!runtime.state?.originState.settings.autoMock || !runtime.state.globalEnabled) {
+  if (!runtime.state?.globalEnabled || !getActiveProfileState(runtime.state).settings.autoMock) {
     return;
   }
 
-  const matchedSender = findMatchingSender(runtime.state.originState.senders, eventName);
+  const matchedSender = findMatchingSender(getActiveProfileState(runtime.state).senders, eventName);
   if (!matchedSender) {
     await pushWarn(eventName, payload, `No sender matched for event "${eventName}".`);
     return;
@@ -149,6 +149,9 @@ async function recordBridgeCall(message: PageBridgeCallMessage): Promise<void> {
 async function handlePanelCommand(command: PanelCommand): Promise<void> {
   switch (command.type) {
     case "REQUEST_SNAPSHOT":
+      return;
+    case "SET_ACTIVE_PROFILE":
+      await changeActiveProfile(command.profileId);
       return;
     case "UPSERT_SENDER":
       await upsertSender(command.sender);
@@ -222,7 +225,9 @@ async function deleteResponse(senderId: string, responseId: string) {
 }
 
 async function triggerResponse(senderId: string, responseId: string) {
-  const sender = runtime.state?.originState.senders.find((item) => item.id === senderId);
+  const sender = runtime.state
+    ? getActiveProfileState(runtime.state).senders.find((item) => item.id === senderId)
+    : undefined;
   const response = sender?.responses.find((item) => item.id === responseId);
   if (!response) {
     return;
@@ -230,7 +235,7 @@ async function triggerResponse(senderId: string, responseId: string) {
 
   dispatchToPage(response.eventName, response.detail);
   await mutateRuntime(runtime, async (state) => {
-    state.originState.logs = appendLog(state, {
+    getActiveProfileState(state).logs = appendLog(state, {
       type: "EMIT",
       event: response.eventName,
       response: response.detail,
@@ -247,8 +252,15 @@ async function importSenders(
 
 async function clearLogs() {
   await mutateRuntime(runtime, async (state) => {
-    state.originState.logs = [];
+    getActiveProfileState(state).logs = [];
   });
+}
+
+async function changeActiveProfile(profileId: BridgeProfileId) {
+  await mutateRuntime(runtime, async (state) => {
+    setActiveProfile(state, profileId);
+  });
+  syncSettingsToPage(runtime);
 }
 
 async function setGlobalEnabled(enabled: boolean) {
@@ -260,13 +272,14 @@ async function setGlobalEnabled(enabled: boolean) {
 
 async function updateSettings(settings: Partial<OriginBridgeSettings>) {
   await mutateRuntime(runtime, async (state) => {
-    state.originState.settings = {
-      ...state.originState.settings,
+    const profileState = getActiveProfileState(state);
+    profileState.settings = {
+      ...profileState.settings,
       ...settings,
     };
-    state.originState.logs = trimLogs(
-      state.originState.logs,
-      state.originState.settings.maxLogCount,
+    profileState.logs = trimLogs(
+      profileState.logs,
+      profileState.settings.maxLogCount,
     );
   });
   syncSettingsToPage(runtime);
@@ -275,7 +288,7 @@ async function updateSettings(settings: Partial<OriginBridgeSettings>) {
 async function manualEmit(eventName: string, detail: unknown) {
   dispatchToPage(eventName, detail);
   await mutateRuntime(runtime, async (state) => {
-    state.originState.logs = appendLog(state, {
+    getActiveProfileState(state).logs = appendLog(state, {
       type: "EMIT",
       event: eventName,
       response: detail,
@@ -284,7 +297,9 @@ async function manualEmit(eventName: string, detail: unknown) {
 }
 
 async function replayLogResponse(logId: string) {
-  const log = runtime.state?.originState.logs.find((item) => item.id === logId);
+  const log = runtime.state
+    ? getActiveProfileState(runtime.state).logs.find((item) => item.id === logId)
+    : undefined;
   if (!log?.event) {
     return;
   }
@@ -293,7 +308,9 @@ async function replayLogResponse(logId: string) {
 }
 
 async function dispatchActiveResponse(senderId: string, responseId: string) {
-  const sender = runtime.state?.originState.senders.find((item) => item.id === senderId);
+  const sender = runtime.state
+    ? getActiveProfileState(runtime.state).senders.find((item) => item.id === senderId)
+    : undefined;
   const response = sender?.responses.find((item) => item.id === responseId);
   if (!sender || !response || !runtime.state?.globalEnabled) {
     return;
@@ -301,7 +318,7 @@ async function dispatchActiveResponse(senderId: string, responseId: string) {
 
   dispatchToPage(response.eventName, response.detail);
   await mutateRuntime(runtime, async (state) => {
-    state.originState.logs = appendLog(state, {
+    getActiveProfileState(state).logs = appendLog(state, {
       type: "MOCK",
       event: response.eventName,
       response: response.detail,
@@ -317,7 +334,7 @@ async function updateHitCount(senderId: string, responseId: string) {
 
 async function pushWarn(eventName: string, payload: unknown, message: string) {
   await mutateRuntime(runtime, async (state) => {
-    state.originState.logs = appendLog(state, {
+    getActiveProfileState(state).logs = appendLog(state, {
       type: "WARN",
       event: eventName,
       payload,
@@ -328,7 +345,7 @@ async function pushWarn(eventName: string, payload: unknown, message: string) {
 
 async function pushError(message: string, payload: unknown) {
   await mutateRuntime(runtime, async (state) => {
-    state.originState.logs = appendLog(state, {
+    getActiveProfileState(state).logs = appendLog(state, {
       type: "ERROR",
       payload,
       message,
@@ -340,7 +357,8 @@ async function updateSenders(
   updater: (senders: BridgeSender[]) => BridgeSender[],
 ): Promise<void> {
   await mutateRuntime(runtime, async (state) => {
-    state.originState.senders = updater(state.originState.senders);
+    const profileState = getActiveProfileState(state);
+    profileState.senders = updater(profileState.senders);
   });
 }
 

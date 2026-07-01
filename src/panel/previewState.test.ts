@@ -32,6 +32,16 @@ describe("preview state", () => {
     expect(next.senders[0]?.lastActiveResponseId).toBe(response.id);
   });
 
+  it("SET_ACTIVE_PROFILE 会切到对应方案快照", () => {
+    const next = applyPreviewCommand(createPreviewSnapshot(), {
+      type: "SET_ACTIVE_PROFILE",
+      profileId: "pkg03",
+    });
+
+    expect(next.activeProfileId).toBe("pkg03");
+    expect(next.senders[0]?.matchEvent).toBe("requestLogin");
+  });
+
   it("DELETE_RESPONSE 删除当前激活项后会切到剩余第一条", () => {
     const first = createResponse("resp-1");
     const second = createResponse("resp-2");

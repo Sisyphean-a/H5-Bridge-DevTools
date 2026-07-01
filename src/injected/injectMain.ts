@@ -1,4 +1,10 @@
 import {
+  BRIDGE_PROFILES,
+  DEFAULT_BRIDGE_PROFILE_ID,
+  getBridgeProfile,
+  type BridgeProfileId,
+} from "../shared/bridgeProfiles";
+import {
   SOURCE_EXTENSION,
   SOURCE_PAGE,
 } from "../shared/constants";
@@ -6,17 +12,19 @@ import type { PageRuntimeMessage } from "../shared/messageTypes";
 
 interface InjectState {
   globalEnabled: boolean;
-  overrideExistingAndroidBridge: boolean;
+  profileId: BridgeProfileId;
+  overrideExistingBridge: boolean;
 }
+
+type BridgeWindow = Window & Record<string, BridgePostMessageHost | undefined>;
 
 const injectState: InjectState = {
   globalEnabled: true,
-  overrideExistingAndroidBridge: true,
+  profileId: DEFAULT_BRIDGE_PROFILE_ID,
+  overrideExistingBridge: true,
 };
 
-const originalBridge = window.AndroidBridge?.postMessage
-  ? window.AndroidBridge
-  : undefined;
+const mockBridges: Partial<Record<string, BridgePostMessageHost>> = {};
 
 function parseBridgeMessage(message: unknown): unknown {
   if (typeof message !== "string") {
@@ -30,7 +38,7 @@ function parseBridgeMessage(message: unknown): unknown {
   }
 }
 
-function createMockBridge() {
+function createMockBridge(): BridgePostMessageHost {
   return {
     postMessage(message: unknown) {
       window.postMessage(
@@ -48,20 +56,80 @@ function createMockBridge() {
   };
 }
 
-function shouldUseOriginalBridge(): boolean {
-  return Boolean(
-    originalBridge?.postMessage &&
-      (!injectState.globalEnabled || !injectState.overrideExistingAndroidBridge),
-  );
+function getWindowBridge(hostObject: string): BridgePostMessageHost | undefined {
+  return (window as unknown as BridgeWindow)[hostObject];
 }
 
-function syncBridgeBinding(): void {
-  if (shouldUseOriginalBridge()) {
-    window.AndroidBridge = originalBridge;
+function setWindowBridge(
+  hostObject: string,
+  bridge: BridgePostMessageHost | undefined,
+): void {
+  const bridgeWindow = window as unknown as BridgeWindow;
+  if (bridge) {
+    bridgeWindow[hostObject] = bridge;
     return;
   }
 
-  window.AndroidBridge = createMockBridge();
+  delete bridgeWindow[hostObject];
+}
+
+function getOriginalBridges(): Partial<Record<string, BridgePostMessageHost>> {
+  const stored = window.__H5_BRIDGE_ORIGINAL_BRIDGES__ ?? {};
+  BRIDGE_PROFILES.forEach(({ hostObject }) => {
+    const bridge = getWindowBridge(hostObject);
+    if (!stored[hostObject] && bridge?.postMessage) {
+      stored[hostObject] = bridge;
+    }
+  });
+  window.__H5_BRIDGE_ORIGINAL_BRIDGES__ = stored;
+  return stored;
+}
+
+function getMockBridge(hostObject: string): BridgePostMessageHost {
+  if (!mockBridges[hostObject]) {
+    mockBridges[hostObject] = createMockBridge();
+  }
+  return mockBridges[hostObject]!;
+}
+
+function shouldUseOriginalBridge(hostObject: string): boolean {
+  const originalBridge = getOriginalBridges()[hostObject];
+  return Boolean(
+    originalBridge?.postMessage &&
+      (!injectState.globalEnabled || !injectState.overrideExistingBridge),
+  );
+}
+
+function syncActiveBridge(hostObject: string): void {
+  if (shouldUseOriginalBridge(hostObject)) {
+    setWindowBridge(hostObject, getOriginalBridges()[hostObject]);
+    return;
+  }
+
+  setWindowBridge(hostObject, getMockBridge(hostObject));
+}
+
+function restoreInactiveBridge(hostObject: string): void {
+  const originalBridge = getOriginalBridges()[hostObject];
+  if (originalBridge?.postMessage) {
+    setWindowBridge(hostObject, originalBridge);
+    return;
+  }
+
+  if (getWindowBridge(hostObject) === mockBridges[hostObject]) {
+    setWindowBridge(hostObject, undefined);
+  }
+}
+
+function syncBridgeBinding(): void {
+  const activeHostObject = getBridgeProfile(injectState.profileId).hostObject;
+  BRIDGE_PROFILES.forEach(({ hostObject }) => {
+    if (hostObject === activeHostObject) {
+      syncActiveBridge(hostObject);
+      return;
+    }
+    restoreInactiveBridge(hostObject);
+  });
 }
 
 function handleDispatchMessage(message: PageRuntimeMessage): void {
@@ -82,8 +150,8 @@ function handleSettingsMessage(message: PageRuntimeMessage): void {
   }
 
   injectState.globalEnabled = message.payload.globalEnabled;
-  injectState.overrideExistingAndroidBridge =
-    message.payload.overrideExistingAndroidBridge;
+  injectState.profileId = message.payload.profileId ?? DEFAULT_BRIDGE_PROFILE_ID;
+  injectState.overrideExistingBridge = message.payload.overrideExistingBridge;
   syncBridgeBinding();
 }
 
@@ -99,19 +167,16 @@ function handleExtensionMessage(event: MessageEvent<PageRuntimeMessage>): void {
   handleSettingsMessage(event.data);
 }
 
-function installAndroidBridgeMock(): void {
+function installBridgeMock(): void {
+  getOriginalBridges();
   if (window.__H5_BRIDGE_INJECT_MAIN_INSTALLED__) {
     syncBridgeBinding();
     return;
   }
 
   window.__H5_BRIDGE_INJECT_MAIN_INSTALLED__ = true;
-  if (originalBridge?.postMessage) {
-    window.__H5_BRIDGE_ORIGINAL_ANDROID_BRIDGE__ = originalBridge;
-  }
-
   syncBridgeBinding();
   window.addEventListener("message", handleExtensionMessage);
 }
 
-installAndroidBridgeMock();
+installBridgeMock();

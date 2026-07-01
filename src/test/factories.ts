@@ -1,3 +1,4 @@
+import { DEFAULT_BRIDGE_PROFILE_ID } from "../shared/bridgeProfiles";
 import type { BridgePanelSnapshot } from "../shared/bridgeTypes";
 import type { OriginBridgeSettings } from "../shared/ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
@@ -6,7 +7,7 @@ const defaultSettings: OriginBridgeSettings = {
   autoMock: true,
   preserveLogs: false,
   maxLogCount: 200,
-  overrideExistingAndroidBridge: true,
+  overrideExistingBridge: true,
 };
 
 export function createResponse(
@@ -65,6 +66,7 @@ export function createSnapshot(
     origin: "https://example.com",
     href: "https://example.com/page",
     globalEnabled: true,
+    activeProfileId: DEFAULT_BRIDGE_PROFILE_ID,
     senders: [],
     logs: [],
     settings: { ...defaultSettings },

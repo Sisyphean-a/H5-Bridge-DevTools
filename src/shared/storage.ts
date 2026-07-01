@@ -1,8 +1,16 @@
 import type {
   BridgePanelSnapshot,
   BridgeStorageState,
-  OriginBridgeState,
+  OriginBridgeProfileState,
+  OriginScopedBridgeState,
 } from "./bridgeTypes";
+import {
+  BRIDGE_PROFILES,
+  DEFAULT_BRIDGE_PROFILE_ID,
+  getBridgeProfile,
+  isBridgeProfileId,
+  type BridgeProfileId,
+} from "./bridgeProfiles";
 import { cloneJson } from "./json";
 import { migrateStorageState, type LegacyStorageState } from "./migrate";
 import { getPresetSenders } from "./presets";
@@ -18,14 +26,28 @@ export const DEFAULT_SETTINGS: OriginBridgeSettings = {
   autoMock: true,
   preserveLogs: false,
   maxLogCount: 200,
-  overrideExistingAndroidBridge: true,
+  overrideExistingBridge: true,
 };
 
-export function createDefaultOriginState(): OriginBridgeState {
+export function createDefaultProfileState(
+  profileId: BridgeProfileId,
+): OriginBridgeProfileState {
   return {
-    senders: getPresetSenders(),
+    senders: getPresetSenders(profileId),
     logs: [],
     settings: { ...DEFAULT_SETTINGS },
+  };
+}
+
+export function createDefaultOriginState(): OriginScopedBridgeState {
+  return {
+    activeProfileId: DEFAULT_BRIDGE_PROFILE_ID,
+    profiles: Object.fromEntries(
+      BRIDGE_PROFILES.map((profile) => [
+        profile.id,
+        createDefaultProfileState(profile.id),
+      ]),
+    ) as Record<BridgeProfileId, OriginBridgeProfileState>,
   };
 }
 
@@ -79,15 +101,26 @@ export async function buildSnapshot(
   origin: string,
   href: string,
 ): Promise<BridgePanelSnapshot> {
-  const state = await ensureOriginState(origin);
-  const originState = state.origins[origin] ?? createDefaultOriginState();
+  const { globalEnabled, originState } = await readOriginScopedState(origin);
+  const profileState = getActiveProfileState(originState);
   return {
     origin,
     href,
+    globalEnabled,
+    activeProfileId: originState.activeProfileId,
+    senders: cloneJson(profileState.senders),
+    logs: cloneJson(profileState.logs),
+    settings: { ...profileState.settings },
+  };
+}
+
+export async function readOriginScopedState(
+  origin: string,
+): Promise<{ globalEnabled: boolean; originState: OriginScopedBridgeState }> {
+  const state = await ensureOriginState(origin);
+  return {
     globalEnabled: state.globalEnabled,
-    senders: cloneJson(originState.senders),
-    logs: cloneJson(originState.logs),
-    settings: { ...originState.settings },
+    originState: cloneJson(state.origins[origin] ?? createDefaultOriginState()),
   };
 }
 
@@ -130,21 +163,81 @@ function normalizeStorageState(
 }
 
 function normalizeOrigins(
-  origins: Record<string, OriginBridgeState>,
-): Record<string, OriginBridgeState> {
+  origins: Record<string, OriginScopedBridgeState | OriginBridgeProfileState>,
+): Record<string, OriginScopedBridgeState> {
   return Object.fromEntries(
     Object.entries(origins).map(([origin, state]) => [
       origin,
-      {
-        senders: normalizeSenders(state.senders ?? []),
-        logs: cloneJson(state.logs ?? []),
-        settings: {
-          ...DEFAULT_SETTINGS,
-          ...(state.settings ?? {}),
-        },
-      },
+      normalizeOriginState(state),
     ]),
   );
+}
+
+function normalizeOriginState(
+  state: OriginScopedBridgeState | OriginBridgeProfileState | undefined,
+): OriginScopedBridgeState {
+  if (!state) {
+    return createDefaultOriginState();
+  }
+
+  if (isScopedOriginState(state)) {
+    const activeProfileId = isBridgeProfileId(state.activeProfileId)
+      ? state.activeProfileId
+      : DEFAULT_BRIDGE_PROFILE_ID;
+    return {
+      activeProfileId,
+      profiles: {
+        pkg01: normalizeProfileState(state.profiles?.pkg01, "pkg01"),
+        pkg03: normalizeProfileState(state.profiles?.pkg03, "pkg03"),
+      },
+    };
+  }
+
+  return {
+    activeProfileId: DEFAULT_BRIDGE_PROFILE_ID,
+    profiles: {
+      pkg01: normalizeProfileState(state, "pkg01"),
+      pkg03: createDefaultProfileState("pkg03"),
+    },
+  };
+}
+
+function normalizeProfileState(
+  state: Partial<OriginBridgeProfileState> | undefined,
+  profileId: BridgeProfileId,
+): OriginBridgeProfileState {
+  return {
+    senders: normalizeSenders(state?.senders ?? getPresetSenders(profileId)),
+    logs: cloneJson(state?.logs ?? []),
+    settings: normalizeSettings(state?.settings),
+  };
+}
+
+function normalizeSettings(
+  settings: Partial<OriginBridgeSettings & { overrideExistingAndroidBridge?: boolean }> | undefined,
+): OriginBridgeSettings {
+  const { overrideExistingAndroidBridge: legacyOverride, ...cleanSettings } = settings ?? {};
+  return {
+    ...DEFAULT_SETTINGS,
+    ...cleanSettings,
+    overrideExistingBridge:
+      cleanSettings.overrideExistingBridge ??
+      legacyOverride ??
+      DEFAULT_SETTINGS.overrideExistingBridge,
+  };
+}
+
+function getActiveProfileState(
+  originState: OriginScopedBridgeState,
+): OriginBridgeProfileState {
+  const profileId = getBridgeProfile(originState.activeProfileId).id;
+  return originState.profiles[profileId] ?? createDefaultProfileState(profileId);
+}
+
+function isScopedOriginState(
+  state: OriginScopedBridgeState | OriginBridgeProfileState,
+): state is OriginScopedBridgeState {
+  return "profiles" in state;
 }
 
 function normalizeSenders(senders: BridgeSender[]): BridgeSender[] {
