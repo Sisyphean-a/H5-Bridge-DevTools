@@ -4,6 +4,7 @@ import type {
   OriginBridgeProfileState,
   OriginScopedBridgeState,
 } from "./bridgeTypes";
+import { BRIDGE_PROFILES } from "./bridgeProfiles";
 import { getPresetSenders } from "./presets";
 import { createId } from "./id";
 import { cloneJson } from "./json";
@@ -65,6 +66,10 @@ function migrateOriginState(state: LegacyOriginBridgeState): OriginScopedBridgeS
 
   return {
     activeProfileId: "pkg01",
+    profileDefinitions: Object.fromEntries(
+      BRIDGE_PROFILES.map((profile) => [profile.id, { ...profile }]),
+    ),
+    knownHostObjects: BRIDGE_PROFILES.map((profile) => profile.hostObject),
     profiles: {
       pkg01: pkg01State,
       pkg03: {

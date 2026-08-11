@@ -10,7 +10,7 @@ Chrome Manifest V3 开发者工具扩展，用于在浏览器里模拟 Android `
 - 按 `event` 规则自动 `dispatchEvent`
 - 规则 CRUD、启用/禁用、复制、搜索
 - 按 origin 存储规则与设置
-- 导入 / 导出规则 JSON
+- 导入 JSON / YAML 完整规则包、导出 JSON 规则包，可新增桥接宿主对象
 - 手动发送原生消息
 - 内置登录、相机、联系人、活体、定位、上传大 JSON、`baseRequest` 模板
 - 从日志快速创建规则
@@ -51,7 +51,7 @@ npm run build
 2. 按 `F12` 打开开发者工具
 3. 切换到顶部 `H5 桥接` 面板
 4. 保持“模拟已开启”
-5. 在左侧选择模板创建规则，或新建空白规则
+5. 导入规则包，或在左侧选择模板创建规则、新建空白规则
 6. 页面调用：
 
 ```js
@@ -76,41 +76,32 @@ window.dispatchEvent(
 9. 面板日志会追加 `模拟 openCamera`
 10. 可在“手动发送”区域手动发送原生事件测试页面监听逻辑
 
-## 规则 JSON 格式
+## 规则包格式
 
-```ts
-interface BridgeMockRule {
-  id: string
-  name: string
-  enabled: boolean
-  match: {
-    event: string
-  }
-  response: {
-    delayMs: number
-    mode: "dispatchEvent"
-    eventName: string
-    detail: unknown
-  }
-  meta?: {
-    createdAt?: number
-    updatedAt?: number
-    hitCount?: number
-  }
-}
+点击工具栏“导入”可选择 `.json`、`.yaml` 或 `.yml` 文件。一个文件定义一套桥接方案、可选设置和全部规则；导入后会切换到该方案。导出会生成同一格式的 JSON 文件。已有桥接项目可按[规则包生成指南](docs/bridge-rule-package-guide.md)收集最小事实并生成文件，无需通读完整代码。
+
+```yaml
+version: 1
+name: Demo 规则包
+profile:
+  id: demo-app
+  title: Demo App
+  hostObject: DemoBridge
+settings:
+  autoMock: true
+  overrideExistingBridge: true
+senders:
+  - name: 登录
+    matchEvent: login
+    responses:
+      - name: 成功
+        delayMs: 0
+        eventName: login
+        detail:
+          success: true
 ```
 
-导出文件格式：
-
-```json
-{
-  "version": 1,
-  "name": "H5 桥接调试工具规则",
-  "origin": "http://localhost:5173",
-  "exportedAt": 1780000000000,
-  "rules": []
-}
-```
+`profile.id` 必须是稳定的字母、数字、`.`、`_` 或 `-` 标识；`hostObject` 必须是合法且非保留的 JavaScript 全局属性名。发送条目和响应的 `id` 可省略，导入时会自动生成。导入策略只影响该规则包内的 `senders`：合并、替换或追加但不关联。
 
 ## 常见问题
 
@@ -122,14 +113,14 @@ interface BridgeMockRule {
 
 ### 2. 为什么有 `SEND` 没有 `MOCK`？
 
-- 规则可能未启用
 - “模拟已开启”或“自动模拟”可能已关闭
-- 当前规则的 `match.event` 与发送的 `event` 不一致
+- 当前规则没有活跃响应
+- 当前规则的 `matchEvent` 与发送的 `event` 不一致
 
 ### 3. 为什么导入后规则没有生效？
 
-- 导入策略若为“追加为禁用”，导入规则会默认禁用
-- 规则只按当前页面 `origin` 生效，请确认当前开发者工具面板对应的是目标页面
+- 检查规则包的 `profile.hostObject` 是否与页面调用的宿主对象一致
+- 规则按当前页面 `origin + 方案` 隔离，请确认当前开发者工具面板对应的是目标页面
 
 ### 4. 日志为什么会被清空？
 

@@ -1,6 +1,8 @@
 import type { BridgeLogItem, BridgeLogType, BridgePanelSnapshot } from "../shared/bridgeTypes";
 import {
+  BRIDGE_PROFILES,
   DEFAULT_BRIDGE_PROFILE_ID,
+  getBridgeProfile,
   type BridgeProfileId,
 } from "../shared/bridgeProfiles";
 import { cloneJson } from "../shared/json";
@@ -38,6 +40,8 @@ export function createPreviewSnapshot(
     href: "https://preview.local/devtools",
     globalEnabled: true,
     activeProfileId: profileId,
+    activeProfile: getBridgeProfile(profileId),
+    profiles: BRIDGE_PROFILES.map((profile) => ({ ...profile })),
     senders: [...senders, extraSender],
     logs: createPreviewLogs(profileId),
     settings: { ...previewSettings },
@@ -120,6 +124,20 @@ export function applyPreviewCommand(
         ...snapshot,
         senders: mergeImportedSenders(snapshot.senders, command.senders, command.strategy),
       };
+    case "IMPORT_RULE_PACKAGE": {
+      const profile = command.rulePackage.profile;
+      return {
+        ...snapshot,
+        activeProfileId: profile.id,
+        activeProfile: { ...profile },
+        profiles: [
+          ...snapshot.profiles.filter((item) => item.id !== profile.id),
+          { ...profile },
+        ],
+        senders: mergeImportedSenders(snapshot.senders, command.rulePackage.senders, command.strategy),
+        settings: { ...snapshot.settings, ...command.rulePackage.settings },
+      };
+    }
     case "CLEAR_LOGS":
       return { ...snapshot, logs: [] };
     case "SET_GLOBAL_ENABLED":

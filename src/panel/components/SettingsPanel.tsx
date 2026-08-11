@@ -1,14 +1,11 @@
 import type { CSSProperties, ReactNode } from "react";
-import {
-  BRIDGE_PROFILES,
-  getBridgeProfile,
-  type BridgeProfileId,
-} from "../../shared/bridgeProfiles";
+import type { BridgeProfile, BridgeProfileId } from "../../shared/bridgeProfiles";
 import type { OriginBridgeSettings } from "../../shared/ruleTypes";
 import { panelTheme } from "../designSystem";
 
 interface SettingsPanelProps {
   activeProfileId: BridgeProfileId | null;
+  profiles: BridgeProfile[];
   settings: OriginBridgeSettings | null;
   onChange: (settings: Partial<OriginBridgeSettings>) => void;
   onSelectProfile: (profileId: BridgeProfileId) => void;
@@ -16,6 +13,7 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({
   activeProfileId,
+  profiles,
   settings,
   onChange,
   onSelectProfile,
@@ -28,19 +26,18 @@ export function SettingsPanel({
     );
   }
 
-  const activeProfile = getBridgeProfile(activeProfileId);
-  const activeHostPath = `window.${activeProfile.hostObject}.postMessage`;
+  const activeProfile = profiles.find((profile) => profile.id === activeProfileId);
+  if (!activeProfile) {
+    return <section style={loadingStyle}>等待当前桥接方案加载</section>;
+  }
 
   return (
     <section style={panelStyle}>
       <div style={bodyStyle}>
         <SectionTitle>桥接方案</SectionTitle>
         <div style={profileSectionStyle}>
-          <div style={profileHintStyle}>
-            同一 origin 下按方案隔离保存规则、日志和模板；切换后会直接切到另一套协议桶。
-          </div>
           <div style={profileListStyle}>
-            {BRIDGE_PROFILES.map((profile) => {
+            {profiles.map((profile) => {
               const active = profile.id === activeProfileId;
               return (
                 <button
@@ -50,19 +47,12 @@ export function SettingsPanel({
                   style={getProfileCardStyle(active)}
                 >
                   <div style={profileCardTopStyle}>
-                    <span style={getProfileBadgeStyle(active)}>{profile.badge}</span>
+                    <span style={getProfileBadgeStyle(active)}>{profile.id}</span>
                     <span style={profileTitleStyle}>{profile.title}</span>
                     <span style={getProfileStateStyle(active)}>
                       {active ? "当前方案" : "点击切换"}
                     </span>
                   </div>
-                  <div style={profileDescriptionStyle}>{profile.description}</div>
-                  <code style={profileHostStyle}>{`window.${profile.hostObject}.postMessage`}</code>
-                  <div style={profileTagRowStyle}>
-                    <InfoTag>{`发送 ${profile.outgoingField}`}</InfoTag>
-                    <InfoTag>{`回包 ${profile.incomingField}`}</InfoTag>
-                  </div>
-                  <div style={profileNoteStyle}>{profile.resultNote}</div>
                 </button>
               );
             })}
@@ -70,22 +60,6 @@ export function SettingsPanel({
         </div>
 
         <SectionTitle>拦截设置</SectionTitle>
-        <SettingRow
-          label="当前宿主对象"
-          description="当前方案会把 H5 发送桥接接到下面这个入口；切换方案会同步切换这里的宿主。"
-          control={<InfoTag>{activeHostPath}</InfoTag>}
-        />
-        <SettingRow
-          label="当前字段口径"
-          description="这里只展示当前方案的协议提示，不会自动改写你在响应编辑器里填的 detail 结构。"
-          control={
-            <div style={fieldTagListStyle}>
-              <InfoTag>{`event`}</InfoTag>
-              <InfoTag>{activeProfile.outgoingField}</InfoTag>
-              <InfoTag>{activeProfile.incomingField}</InfoTag>
-            </div>
-          }
-        />
         <SettingRow
           label="自动模拟"
           description="启用后，匹配的桥接请求会自动返回当前方案下规则中的响应。"
@@ -310,11 +284,6 @@ const profileSectionStyle: CSSProperties = {
   flexDirection: "column",
   gap: 10,
 };
-const profileHintStyle: CSSProperties = {
-  fontSize: 11,
-  lineHeight: 1.6,
-  color: panelTheme.textSecondary,
-};
 const profileListStyle: CSSProperties = { display: "grid", gap: 10 };
 const profileCardTopStyle: CSSProperties = {
   display: "flex",
@@ -325,26 +294,6 @@ const profileTitleStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
   color: panelTheme.text,
-};
-const profileDescriptionStyle: CSSProperties = {
-  fontSize: 11,
-  lineHeight: 1.6,
-  color: panelTheme.textSecondary,
-};
-const profileHostStyle: CSSProperties = {
-  fontSize: 11,
-  fontFamily: panelTheme.mono,
-  color: panelTheme.text,
-};
-const profileTagRowStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 6,
-};
-const profileNoteStyle: CSSProperties = {
-  fontSize: 10,
-  lineHeight: 1.6,
-  color: panelTheme.textSecondary,
 };
 const rowIconStyle: CSSProperties = {
   width: 28,
@@ -376,12 +325,6 @@ const rowControlStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   paddingTop: 3,
-};
-const fieldTagListStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: 6,
-  justifyContent: "flex-end",
 };
 const numberInputStyle: CSSProperties = {
   width: 80,

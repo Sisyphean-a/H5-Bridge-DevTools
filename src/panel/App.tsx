@@ -96,6 +96,7 @@ export function App({ tabId }: AppProps) {
           <div className="rules-frame">
             <SettingsPanel
               activeProfileId={state.snapshot?.activeProfileId ?? null}
+              profiles={state.snapshot?.profiles ?? []}
               settings={state.snapshot?.settings ?? null}
               onChange={(patch) =>
                 postCommand({ type: "UPDATE_SETTINGS", settings: patch })

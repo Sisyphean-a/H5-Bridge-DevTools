@@ -1,5 +1,5 @@
 import { safeParseJson } from "../shared/json";
-import { exportSendersFile, parseImportedSenders } from "./fileActions";
+import { exportRulePackageFile, parseImportedRulePackage } from "./fileActions";
 import { createManualEmitDraft, formatManualEmit } from "./utils";
 import type { PanelActionContext } from "./actionContext";
 import { postCommand, setToast } from "./actionContext";
@@ -34,22 +34,22 @@ export function exportRules(context: PanelActionContext): void {
   if (!snapshot) {
     return;
   }
-  exportSendersFile(window.location.origin, snapshot.senders);
+  exportRulePackageFile(snapshot);
   setToast(context, "success", "已导出");
 }
 
 export function importRules(context: PanelActionContext, content: string): void {
-  const result = parseImportedSenders(content);
+  const result = parseImportedRulePackage(content);
   if (!result.ok) {
     setToast(context, "error", result.error);
     return;
   }
   postCommand(context, {
-    type: "IMPORT_SENDERS",
-    senders: result.senders,
+    type: "IMPORT_RULE_PACKAGE",
+    rulePackage: result.rulePackage,
     strategy: context.state.importStrategy,
   });
-  setToast(context, "success", "已导入");
+  setToast(context, "success", `已导入规则包：${result.rulePackage.profile.title}`);
 }
 
 export function copyText(context: PanelActionContext, text: string): void {

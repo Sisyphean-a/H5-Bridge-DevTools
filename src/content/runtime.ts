@@ -5,13 +5,14 @@ import type {
   OriginBridgeProfileState,
   OriginScopedBridgeState,
 } from "../shared/bridgeTypes";
-import { getBridgeProfile, type BridgeProfileId } from "../shared/bridgeProfiles";
+import type { BridgeProfileId } from "../shared/bridgeProfiles";
 import { SOURCE_EXTENSION, STORAGE_KEY } from "../shared/constants";
 import { createId } from "../shared/id";
 import type { PageDispatchMessage, PageSettingsMessage } from "../shared/messageTypes";
 import { cloneJson } from "../shared/json";
 import {
   createDefaultOriginState,
+  getOriginProfile,
   readOriginScopedState,
   updateStorageState,
 } from "../shared/storage";
@@ -124,6 +125,13 @@ export function getSnapshot(runtime: ContentRuntime): BridgePanelSnapshot {
     href: runtime.state.href,
     globalEnabled: runtime.state.globalEnabled,
     activeProfileId: runtime.state.originState.activeProfileId,
+    activeProfile: getOriginProfile(
+      runtime.state.originState,
+      runtime.state.originState.activeProfileId,
+    ),
+    profiles: Object.values(runtime.state.originState.profileDefinitions).map((profile) => ({
+      ...profile,
+    })),
     senders: cloneJson(getActiveProfileState(runtime.state).senders),
     logs: cloneJson(getActiveProfileState(runtime.state).logs),
     settings: { ...getActiveProfileState(runtime.state).settings },
@@ -166,7 +174,11 @@ export function syncSettingsToPage(runtime: ContentRuntime): void {
     type: "SYNC_SETTINGS",
     payload: {
       globalEnabled: runtime.state.globalEnabled,
-      profileId: runtime.state.originState.activeProfileId,
+      profile: getOriginProfile(
+        runtime.state.originState,
+        runtime.state.originState.activeProfileId,
+      ),
+      knownHostObjects: runtime.state.originState.knownHostObjects,
       overrideExistingBridge: getActiveProfileState(runtime.state).settings.overrideExistingBridge,
     },
   };
@@ -214,7 +226,9 @@ export function setActiveProfile(
   state: RuntimeState,
   profileId: BridgeProfileId,
 ): void {
-  state.originState.activeProfileId = getBridgeProfile(profileId).id;
+  if (state.originState.profiles[profileId]) {
+    state.originState.activeProfileId = profileId;
+  }
 }
 
 export function getActiveProfileState(
@@ -239,6 +253,13 @@ function mergeSnapshotIntoOriginState(
   return {
     ...baseState,
     activeProfileId: snapshot.activeProfileId,
+    profileDefinitions: {
+      ...baseState.profileDefinitions,
+      [snapshot.activeProfile.id]: { ...snapshot.activeProfile },
+    },
+    knownHostObjects: Array.from(
+      new Set([...baseState.knownHostObjects, snapshot.activeProfile.hostObject]),
+    ),
     profiles: {
       ...baseState.profiles,
       [snapshot.activeProfileId]: nextProfileState,

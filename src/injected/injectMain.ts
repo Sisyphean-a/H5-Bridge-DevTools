@@ -1,18 +1,17 @@
 import {
   BRIDGE_PROFILES,
-  DEFAULT_BRIDGE_PROFILE_ID,
   getBridgeProfile,
-  type BridgeProfileId,
+  isBridgeHostObjectName,
+  isBridgeProfile,
+  type BridgeProfile,
 } from "../shared/bridgeProfiles";
-import {
-  SOURCE_EXTENSION,
-  SOURCE_PAGE,
-} from "../shared/constants";
+import { SOURCE_EXTENSION, SOURCE_PAGE } from "../shared/constants";
 import type { PageRuntimeMessage } from "../shared/messageTypes";
 
 interface InjectState {
   globalEnabled: boolean;
-  profileId: BridgeProfileId;
+  profile: BridgeProfile;
+  knownHostObjects: string[];
   overrideExistingBridge: boolean;
 }
 
@@ -20,7 +19,8 @@ type BridgeWindow = Window & Record<string, BridgePostMessageHost | undefined>;
 
 const injectState: InjectState = {
   globalEnabled: true,
-  profileId: DEFAULT_BRIDGE_PROFILE_ID,
+  profile: getBridgeProfile(undefined),
+  knownHostObjects: BRIDGE_PROFILES.map((profile) => profile.hostObject),
   overrideExistingBridge: true,
 };
 
@@ -60,10 +60,7 @@ function getWindowBridge(hostObject: string): BridgePostMessageHost | undefined 
   return (window as unknown as BridgeWindow)[hostObject];
 }
 
-function setWindowBridge(
-  hostObject: string,
-  bridge: BridgePostMessageHost | undefined,
-): void {
+function setWindowBridge(hostObject: string, bridge: BridgePostMessageHost | undefined): void {
   const bridgeWindow = window as unknown as BridgeWindow;
   if (bridge) {
     bridgeWindow[hostObject] = bridge;
@@ -75,14 +72,27 @@ function setWindowBridge(
 
 function getOriginalBridges(): Partial<Record<string, BridgePostMessageHost>> {
   const stored = window.__H5_BRIDGE_ORIGINAL_BRIDGES__ ?? {};
-  BRIDGE_PROFILES.forEach(({ hostObject }) => {
-    const bridge = getWindowBridge(hostObject);
-    if (!stored[hostObject] && bridge?.postMessage) {
-      stored[hostObject] = bridge;
-    }
-  });
   window.__H5_BRIDGE_ORIGINAL_BRIDGES__ = stored;
   return stored;
+}
+
+function isManageableBridgeHost(hostObject: string): boolean {
+  const bridge = (window as unknown as Record<string, unknown>)[hostObject];
+  return (
+    bridge === undefined ||
+    bridge === mockBridges[hostObject] ||
+    (typeof bridge === "object" &&
+      bridge !== null &&
+      typeof Reflect.get(bridge, "postMessage") === "function")
+  );
+}
+
+function rememberOriginalBridge(hostObject: string): void {
+  const originals = getOriginalBridges();
+  const bridge = getWindowBridge(hostObject);
+  if (!originals[hostObject] && bridge?.postMessage && bridge !== mockBridges[hostObject]) {
+    originals[hostObject] = bridge;
+  }
 }
 
 function getMockBridge(hostObject: string): BridgePostMessageHost {
@@ -122,14 +132,15 @@ function restoreInactiveBridge(hostObject: string): void {
 }
 
 function syncBridgeBinding(): void {
-  const activeHostObject = getBridgeProfile(injectState.profileId).hostObject;
-  BRIDGE_PROFILES.forEach(({ hostObject }) => {
-    if (hostObject === activeHostObject) {
+  const hostObjects = new Set([...injectState.knownHostObjects, injectState.profile.hostObject]);
+  for (const hostObject of hostObjects) {
+    rememberOriginalBridge(hostObject);
+    if (hostObject === injectState.profile.hostObject) {
       syncActiveBridge(hostObject);
-      return;
+    } else {
+      restoreInactiveBridge(hostObject);
     }
-    restoreInactiveBridge(hostObject);
-  });
+  }
 }
 
 function handleDispatchMessage(message: PageRuntimeMessage): void {
@@ -149,17 +160,32 @@ function handleSettingsMessage(message: PageRuntimeMessage): void {
     return;
   }
 
-  injectState.globalEnabled = message.payload.globalEnabled;
-  injectState.profileId = message.payload.profileId ?? DEFAULT_BRIDGE_PROFILE_ID;
-  injectState.overrideExistingBridge = message.payload.overrideExistingBridge;
+  const { profile, knownHostObjects, globalEnabled, overrideExistingBridge } = message.payload;
+  if (
+    !isBridgeProfile(profile) ||
+    !Array.isArray(knownHostObjects) ||
+    !knownHostObjects.every(
+      (hostObject): hostObject is string =>
+        typeof hostObject === "string" && isBridgeHostObjectName(hostObject),
+    ) ||
+    typeof globalEnabled !== "boolean" ||
+    typeof overrideExistingBridge !== "boolean" ||
+    !isManageableBridgeHost(profile.hostObject)
+  ) {
+    return;
+  }
+
+  injectState.globalEnabled = globalEnabled;
+  injectState.profile = profile;
+  injectState.knownHostObjects = Array.from(
+    new Set([...injectState.knownHostObjects, ...knownHostObjects, profile.hostObject]),
+  );
+  injectState.overrideExistingBridge = overrideExistingBridge;
   syncBridgeBinding();
 }
 
 function handleExtensionMessage(event: MessageEvent<PageRuntimeMessage>): void {
-  if (event.source !== window) {
-    return;
-  }
-  if (!event.data || event.data.source !== SOURCE_EXTENSION) {
+  if (event.source !== window || !event.data || event.data.source !== SOURCE_EXTENSION) {
     return;
   }
 
@@ -168,14 +194,12 @@ function handleExtensionMessage(event: MessageEvent<PageRuntimeMessage>): void {
 }
 
 function installBridgeMock(): void {
-  getOriginalBridges();
+  syncBridgeBinding();
   if (window.__H5_BRIDGE_INJECT_MAIN_INSTALLED__) {
-    syncBridgeBinding();
     return;
   }
 
   window.__H5_BRIDGE_INJECT_MAIN_INSTALLED__ = true;
-  syncBridgeBinding();
   window.addEventListener("message", handleExtensionMessage);
 }
 

@@ -7,19 +7,23 @@ import type {
 import {
   BRIDGE_PROFILES,
   DEFAULT_BRIDGE_PROFILE_ID,
+  getBuiltInBridgeProfile,
   getBridgeProfile,
-  isBridgeProfileId,
+  isBridgeProfile,
+  type BridgeProfile,
   type BridgeProfileId,
 } from "./bridgeProfiles";
 import { cloneJson } from "./json";
 import { migrateStorageState, type LegacyStorageState } from "./migrate";
 import { getPresetSenders } from "./presets";
 import {
+  mergeImportedSenders,
   normalizeResponseSelection,
   normalizeSenders as normalizeSenderCollection,
 } from "./rules";
-import type { OriginBridgeSettings } from "./ruleTypes";
-import type { BridgeSender, SenderExportPayload } from "./senderTypes";
+import type { RulePackage } from "./rulePackage";
+import type { ImportStrategy, OriginBridgeSettings } from "./ruleTypes";
+import type { BridgeSender } from "./senderTypes";
 import { LEGACY_STORAGE_KEY, STORAGE_KEY } from "./constants";
 
 export const DEFAULT_SETTINGS: OriginBridgeSettings = {
@@ -29,11 +33,9 @@ export const DEFAULT_SETTINGS: OriginBridgeSettings = {
   overrideExistingBridge: true,
 };
 
-export function createDefaultProfileState(
-  profileId: BridgeProfileId,
-): OriginBridgeProfileState {
+export function createDefaultProfileState(profileId: BridgeProfileId): OriginBridgeProfileState {
   return {
-    senders: getPresetSenders(profileId),
+    senders: getBuiltInBridgeProfile(profileId) ? getPresetSenders(profileId) : [],
     logs: [],
     settings: { ...DEFAULT_SETTINGS },
   };
@@ -42,12 +44,13 @@ export function createDefaultProfileState(
 export function createDefaultOriginState(): OriginScopedBridgeState {
   return {
     activeProfileId: DEFAULT_BRIDGE_PROFILE_ID,
+    profileDefinitions: Object.fromEntries(
+      BRIDGE_PROFILES.map((profile) => [profile.id, { ...profile }]),
+    ),
+    knownHostObjects: BRIDGE_PROFILES.map((profile) => profile.hostObject),
     profiles: Object.fromEntries(
-      BRIDGE_PROFILES.map((profile) => [
-        profile.id,
-        createDefaultProfileState(profile.id),
-      ]),
-    ) as Record<BridgeProfileId, OriginBridgeProfileState>,
+      BRIDGE_PROFILES.map((profile) => [profile.id, createDefaultProfileState(profile.id)]),
+    ),
   };
 }
 
@@ -74,9 +77,7 @@ async function migrateLegacyState(): Promise<BridgeStorageState | undefined> {
   return migrated;
 }
 
-export async function writeStorageState(
-  state: BridgeStorageState,
-): Promise<void> {
+export async function writeStorageState(state: BridgeStorageState): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEY]: state });
 }
 
@@ -97,17 +98,17 @@ export async function ensureOriginState(origin: string): Promise<BridgeStorageSt
   return nextState;
 }
 
-export async function buildSnapshot(
-  origin: string,
-  href: string,
-): Promise<BridgePanelSnapshot> {
+export async function buildSnapshot(origin: string, href: string): Promise<BridgePanelSnapshot> {
   const { globalEnabled, originState } = await readOriginScopedState(origin);
   const profileState = getActiveProfileState(originState);
+  const activeProfile = getOriginProfile(originState, originState.activeProfileId);
   return {
     origin,
     href,
     globalEnabled,
     activeProfileId: originState.activeProfileId,
+    activeProfile,
+    profiles: Object.values(originState.profileDefinitions).map((profile) => ({ ...profile })),
     senders: cloneJson(profileState.senders),
     logs: cloneJson(profileState.logs),
     settings: { ...profileState.settings },
@@ -133,27 +134,59 @@ export async function updateStorageState(
   return nextState;
 }
 
-export function createSendersExport(
-  origin: string,
-  senders: BridgeSender[],
-): SenderExportPayload {
+export function createRulePackageExport(
+  name: string,
+  profile: BridgeProfile,
+  state: OriginBridgeProfileState,
+): RulePackage {
   return {
-    version: 2,
-    name: "H5 桥接调试工具规则",
-    origin,
-    exportedAt: Date.now(),
-    senders: cloneJson(senders),
+    version: 1,
+    name,
+    profile: { ...profile },
+    settings: { ...state.settings },
+    senders: cloneJson(state.senders),
   };
 }
 
-function normalizeStorageState(
-  input: BridgeStorageState | undefined,
-): BridgeStorageState {
+export function getOriginProfile(
+  originState: OriginScopedBridgeState,
+  profileId: string,
+): BridgeProfile {
+  return originState.profileDefinitions[profileId] ?? getBridgeProfile(profileId);
+}
+
+export function importRulePackageIntoOriginState(
+  originState: OriginScopedBridgeState,
+  rulePackage: RulePackage,
+  strategy: ImportStrategy,
+): OriginScopedBridgeState {
+  const profileId = rulePackage.profile.id;
+  const currentProfile =
+    originState.profiles[profileId] ?? createDefaultProfileState(profileId);
+  return {
+    ...originState,
+    activeProfileId: profileId,
+    profileDefinitions: {
+      ...originState.profileDefinitions,
+      [profileId]: { ...rulePackage.profile },
+    },
+    knownHostObjects: Array.from(
+      new Set([...originState.knownHostObjects, rulePackage.profile.hostObject]),
+    ),
+    profiles: {
+      ...originState.profiles,
+      [profileId]: {
+        ...currentProfile,
+        senders: mergeImportedSenders(currentProfile.senders, rulePackage.senders, strategy),
+        settings: { ...currentProfile.settings, ...rulePackage.settings },
+      },
+    },
+  };
+}
+
+function normalizeStorageState(input: BridgeStorageState | undefined): BridgeStorageState {
   if (!input) {
-    return {
-      globalEnabled: true,
-      origins: {},
-    };
+    return { globalEnabled: true, origins: {} };
   }
 
   return {
@@ -166,10 +199,7 @@ function normalizeOrigins(
   origins: Record<string, OriginScopedBridgeState | OriginBridgeProfileState>,
 ): Record<string, OriginScopedBridgeState> {
   return Object.fromEntries(
-    Object.entries(origins).map(([origin, state]) => [
-      origin,
-      normalizeOriginState(state),
-    ]),
+    Object.entries(origins).map(([origin, state]) => [origin, normalizeOriginState(state)]),
   );
 }
 
@@ -180,26 +210,46 @@ function normalizeOriginState(
     return createDefaultOriginState();
   }
 
-  if (isScopedOriginState(state)) {
-    const activeProfileId = isBridgeProfileId(state.activeProfileId)
-      ? state.activeProfileId
-      : DEFAULT_BRIDGE_PROFILE_ID;
+  if (!isScopedOriginState(state)) {
+    const defaults = createDefaultOriginState();
     return {
-      activeProfileId,
+      ...defaults,
       profiles: {
-        pkg01: normalizeProfileState(state.profiles?.pkg01, "pkg01"),
-        pkg03: normalizeProfileState(state.profiles?.pkg03, "pkg03"),
+        ...defaults.profiles,
+        pkg01: normalizeProfileState(state, "pkg01"),
       },
     };
   }
 
-  return {
-    activeProfileId: DEFAULT_BRIDGE_PROFILE_ID,
-    profiles: {
-      pkg01: normalizeProfileState(state, "pkg01"),
-      pkg03: createDefaultProfileState("pkg03"),
-    },
-  };
+  const rawDefinitions = state.profileDefinitions ?? {};
+  const definitions: Record<string, BridgeProfile> = Object.fromEntries(
+    Object.entries(rawDefinitions).filter((entry): entry is [string, BridgeProfile] =>
+      isBridgeProfile(entry[1]),
+    ),
+  );
+  const profiles: Record<string, OriginBridgeProfileState> = {};
+  for (const [profileId, profileState] of Object.entries(state.profiles ?? {})) {
+    const profile = definitions[profileId] ?? getBuiltInBridgeProfile(profileId);
+    if (!profile) {
+      continue;
+    }
+    definitions[profileId] = profile;
+    profiles[profileId] = normalizeProfileState(profileState, profileId);
+  }
+
+  for (const profile of BRIDGE_PROFILES) {
+    definitions[profile.id] ??= { ...profile };
+    profiles[profile.id] ??= createDefaultProfileState(profile.id);
+  }
+
+  const activeProfileId = profiles[state.activeProfileId] ? state.activeProfileId : DEFAULT_BRIDGE_PROFILE_ID;
+  const knownHostObjects = Array.from(
+    new Set([
+      ...(Array.isArray(state.knownHostObjects) ? state.knownHostObjects : []),
+      ...Object.values(definitions).map((profile) => profile.hostObject),
+    ]),
+  );
+  return { activeProfileId, profileDefinitions: definitions, knownHostObjects, profiles };
 }
 
 function normalizeProfileState(
@@ -207,7 +257,7 @@ function normalizeProfileState(
   profileId: BridgeProfileId,
 ): OriginBridgeProfileState {
   return {
-    senders: normalizeSenders(state?.senders ?? getPresetSenders(profileId)),
+    senders: normalizeSenders(state?.senders ?? createDefaultProfileState(profileId).senders),
     logs: cloneJson(state?.logs ?? []),
     settings: normalizeSettings(state?.settings),
   };
@@ -221,17 +271,15 @@ function normalizeSettings(
     ...DEFAULT_SETTINGS,
     ...cleanSettings,
     overrideExistingBridge:
-      cleanSettings.overrideExistingBridge ??
-      legacyOverride ??
-      DEFAULT_SETTINGS.overrideExistingBridge,
+      cleanSettings.overrideExistingBridge ?? legacyOverride ?? DEFAULT_SETTINGS.overrideExistingBridge,
   };
 }
 
-function getActiveProfileState(
-  originState: OriginScopedBridgeState,
-): OriginBridgeProfileState {
-  const profileId = getBridgeProfile(originState.activeProfileId).id;
-  return originState.profiles[profileId] ?? createDefaultProfileState(profileId);
+function getActiveProfileState(originState: OriginScopedBridgeState): OriginBridgeProfileState {
+  return (
+    originState.profiles[originState.activeProfileId] ??
+    createDefaultProfileState(originState.activeProfileId)
+  );
 }
 
 function isScopedOriginState(

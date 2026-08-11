@@ -1,5 +1,5 @@
+import type { BridgeProfile, BridgeProfileId } from "./bridgeProfiles";
 import type { OriginBridgeSettings } from "./ruleTypes";
-import type { BridgeProfileId } from "./bridgeProfiles";
 import type { BridgeSender } from "./senderTypes";
 
 export type BridgeLogType = "SEND" | "MOCK" | "EMIT" | "WARN" | "ERROR";
@@ -36,6 +36,8 @@ export interface BridgeStorageState {
 export interface OriginScopedBridgeState {
   activeProfileId: BridgeProfileId;
   profiles: Record<BridgeProfileId, OriginBridgeProfileState>;
+  profileDefinitions: Record<BridgeProfileId, BridgeProfile>;
+  knownHostObjects: string[];
 }
 
 export interface BridgePanelSnapshot {
@@ -43,6 +45,8 @@ export interface BridgePanelSnapshot {
   href: string;
   globalEnabled: boolean;
   activeProfileId: BridgeProfileId;
+  activeProfile: BridgeProfile;
+  profiles: BridgeProfile[];
   senders: BridgeSender[];
   logs: BridgeLogItem[];
   settings: OriginBridgeSettings;

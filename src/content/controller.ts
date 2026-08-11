@@ -7,7 +7,9 @@ import type {
 } from "../shared/messageTypes";
 import { cloneJson } from "../shared/json";
 import { findMatchingSender, getActiveResponse } from "../shared/rules";
+import type { RulePackage } from "../shared/rulePackage";
 import type { ImportStrategy, OriginBridgeSettings } from "../shared/ruleTypes";
+import { importRulePackageIntoOriginState } from "../shared/storage";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
 import {
   appendLog,
@@ -177,6 +179,9 @@ async function handlePanelCommand(command: PanelCommand): Promise<void> {
     case "IMPORT_SENDERS":
       await importSenders(command.senders, command.strategy);
       return;
+    case "IMPORT_RULE_PACKAGE":
+      await importRulePackage(command.rulePackage, command.strategy);
+      return;
     case "CLEAR_LOGS":
       await clearLogs();
       return;
@@ -248,6 +253,20 @@ async function importSenders(
   strategy: ImportStrategy,
 ) {
   await updateSenders((current) => importSendersState(current, senders, strategy));
+}
+
+async function importRulePackage(
+  rulePackage: RulePackage,
+  strategy: ImportStrategy,
+) {
+  await mutateRuntime(runtime, async (state) => {
+    state.originState = importRulePackageIntoOriginState(
+      state.originState,
+      rulePackage,
+      strategy,
+    );
+  });
+  syncSettingsToPage(runtime);
 }
 
 async function clearLogs() {

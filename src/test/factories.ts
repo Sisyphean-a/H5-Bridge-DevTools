@@ -1,4 +1,4 @@
-import { DEFAULT_BRIDGE_PROFILE_ID } from "../shared/bridgeProfiles";
+import { DEFAULT_BRIDGE_PROFILE_ID, getBridgeProfile } from "../shared/bridgeProfiles";
 import type { BridgePanelSnapshot } from "../shared/bridgeTypes";
 import type { OriginBridgeSettings } from "../shared/ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
@@ -67,6 +67,8 @@ export function createSnapshot(
     href: "https://example.com/page",
     globalEnabled: true,
     activeProfileId: DEFAULT_BRIDGE_PROFILE_ID,
+    activeProfile: getBridgeProfile(DEFAULT_BRIDGE_PROFILE_ID),
+    profiles: [getBridgeProfile(DEFAULT_BRIDGE_PROFILE_ID)],
     senders: [],
     logs: [],
     settings: { ...defaultSettings },

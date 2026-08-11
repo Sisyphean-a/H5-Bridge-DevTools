@@ -196,9 +196,9 @@ export function Toolbar({
             fontSize: 11,
           }}
           >
-            <option value="merge">导入：合并</option>
-            <option value="replace">导入：替换</option>
-            <option value="appendUnpaired">导入：追加但不关联</option>
+            <option value="merge">规则包：合并</option>
+            <option value="replace">规则包：替换</option>
+            <option value="appendUnpaired">规则包：追加但不关联</option>
           </select>
         <ToolbarButton label="导入" onClick={() => fileRef.current?.click()} />
         <ToolbarButton label="导出" onClick={onExportRules} />
@@ -245,7 +245,7 @@ export function Toolbar({
         ref={fileRef}
         hidden
         type="file"
-        accept="application/json"
+        accept=".json,.yaml,.yml,application/json,application/x-yaml,text/yaml,text/x-yaml"
         onChange={handleFileChange}
       />
     </header>

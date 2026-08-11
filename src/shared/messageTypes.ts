@@ -1,5 +1,6 @@
 import type { ImportStrategy, OriginBridgeSettings } from "./ruleTypes";
-import type { BridgeProfileId } from "./bridgeProfiles";
+import type { BridgeProfile, BridgeProfileId } from "./bridgeProfiles";
+import type { RulePackage } from "./rulePackage";
 import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
 
 export type PanelCommand =
@@ -13,6 +14,7 @@ export type PanelCommand =
   | { type: "DELETE_RESPONSE"; senderId: string; responseId: string }
   | { type: "TRIGGER_RESPONSE"; senderId: string; responseId: string }
   | { type: "IMPORT_SENDERS"; senders: BridgeSender[]; strategy: ImportStrategy }
+  | { type: "IMPORT_RULE_PACKAGE"; rulePackage: RulePackage; strategy: ImportStrategy }
   | { type: "CLEAR_LOGS" }
   | { type: "SET_GLOBAL_ENABLED"; enabled: boolean }
   | { type: "UPDATE_SETTINGS"; settings: Partial<OriginBridgeSettings> }
@@ -57,7 +59,8 @@ export interface PageSettingsMessage {
   type: "SYNC_SETTINGS";
   payload: {
     globalEnabled: boolean;
-    profileId: BridgeProfileId;
+    profile: BridgeProfile;
+    knownHostObjects: string[];
     overrideExistingBridge: boolean;
   };
 }
