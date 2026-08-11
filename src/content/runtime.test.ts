@@ -6,6 +6,7 @@ import {
   getSnapshot,
   initializeRuntime,
   mutateRuntime,
+  readEventName,
   setRuntimeSnapshot,
   syncRuntimeFromStorageChange,
   type ContentRuntime,
@@ -33,6 +34,13 @@ beforeEach(() => {
   storageListeners = new Set<StorageListener>();
   installChromeStorageMock();
   setWindowLocation(`${origin}/page-a`);
+});
+
+describe("readEventName", () => {
+  it("按方案指定的请求事件字段读取消息", () => {
+    expect(readEventName({ eg18Code: "startLogin" }, "eg18Code")).toBe("startLogin");
+    expect(readEventName({ eg18Code: "startLogin" })).toBeUndefined();
+  });
 });
 
 describe("setRuntimeSnapshot", () => {

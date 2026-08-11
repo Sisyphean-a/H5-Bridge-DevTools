@@ -53,6 +53,7 @@ export function SettingsPanel({
                       {active ? "当前方案" : "点击切换"}
                     </span>
                   </div>
+                  <div style={profileHostStyle}>window.{profile.hostObject}.postMessage</div>
                 </button>
               );
             })}
@@ -60,6 +61,16 @@ export function SettingsPanel({
         </div>
 
         <SectionTitle>拦截设置</SectionTitle>
+        <SettingRow
+          label="当前宿主对象"
+          description="当前方案会把 H5 桥接消息发送到这个入口；切换方案会同步切换宿主对象。"
+          control={<InfoTag>{`window.${activeProfile.hostObject}.postMessage`}</InfoTag>}
+        />
+        <SettingRow
+          label="当前字段路径"
+          description="自动匹配读取桥接消息顶层的此字段；响应 detail 的结构仍以规则包中的配置为准。"
+          control={<InfoTag>{activeProfile.requestEventField ?? "event"}</InfoTag>}
+        />
         <SettingRow
           label="自动模拟"
           description="启用后，匹配的桥接请求会自动返回当前方案下规则中的响应。"
@@ -294,6 +305,11 @@ const profileTitleStyle: CSSProperties = {
   fontSize: 13,
   fontWeight: 700,
   color: panelTheme.text,
+};
+const profileHostStyle: CSSProperties = {
+  color: panelTheme.textSecondary,
+  fontFamily: panelTheme.mono,
+  fontSize: 12,
 };
 const rowIconStyle: CSSProperties = {
   width: 28,

@@ -87,6 +87,7 @@ profile:
   id: demo-app
   title: Demo App
   hostObject: DemoBridge
+  requestEventField: event
 settings:
   autoMock: true
   overrideExistingBridge: true
@@ -101,7 +102,7 @@ senders:
           success: true
 ```
 
-`profile.id` 必须是稳定的字母、数字、`.`、`_` 或 `-` 标识；`hostObject` 必须是合法且非保留的 JavaScript 全局属性名。发送条目和响应的 `id` 可省略，导入时会自动生成。导入策略只影响该规则包内的 `senders`：合并、替换或追加但不关联。
+`profile.id` 必须是稳定的字母、数字、`.`、`_` 或 `-` 标识；`hostObject` 必须是合法且非保留的 JavaScript 全局属性名。`requestEventField` 可选，指定请求消息中的事件字段，省略时为 `event`。发送条目和响应的 `id` 可省略，导入时会自动生成。导入策略只影响该规则包内的 `senders`：合并、替换或追加但不关联。
 
 ## 常见问题
 

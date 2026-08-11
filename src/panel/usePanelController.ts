@@ -112,7 +112,7 @@ export interface PanelController {
   sendManualEmit: () => void;
   formatManualEmitDraft: () => void;
   exportRules: () => void;
-  importRules: (content: string) => void;
+  importRules: (content: string) => Promise<void>;
   copyText: (text: string) => void;
   goBack: () => void;
 }

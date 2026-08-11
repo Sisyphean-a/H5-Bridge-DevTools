@@ -29,7 +29,7 @@ export function Toolbar({
       return;
     }
 
-    onImportRules(await file.text());
+    await onImportRules(await file.text());
     event.target.value = "";
   }
 

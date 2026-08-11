@@ -9,7 +9,7 @@ import {
   DEFAULT_BRIDGE_PROFILE_ID,
   getBuiltInBridgeProfile,
   getBridgeProfile,
-  isBridgeProfile,
+  normalizeBridgeProfile,
   type BridgeProfile,
   type BridgeProfileId,
 } from "./bridgeProfiles";
@@ -152,7 +152,7 @@ export function getOriginProfile(
   originState: OriginScopedBridgeState,
   profileId: string,
 ): BridgeProfile {
-  return originState.profileDefinitions[profileId] ?? getBridgeProfile(profileId);
+  return normalizeBridgeProfile(originState.profileDefinitions[profileId]) ?? getBridgeProfile(profileId);
 }
 
 export function importRulePackageIntoOriginState(
@@ -223,9 +223,10 @@ function normalizeOriginState(
 
   const rawDefinitions = state.profileDefinitions ?? {};
   const definitions: Record<string, BridgeProfile> = Object.fromEntries(
-    Object.entries(rawDefinitions).filter((entry): entry is [string, BridgeProfile] =>
-      isBridgeProfile(entry[1]),
-    ),
+    Object.entries(rawDefinitions).flatMap(([profileId, definition]) => {
+      const profile = normalizeBridgeProfile(definition);
+      return profile ? [[profileId, profile]] : [];
+    }),
   );
   const profiles: Record<string, OriginBridgeProfileState> = {};
   for (const [profileId, profileState] of Object.entries(state.profiles ?? {})) {

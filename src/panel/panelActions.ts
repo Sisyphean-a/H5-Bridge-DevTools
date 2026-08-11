@@ -38,8 +38,8 @@ export function exportRules(context: PanelActionContext): void {
   setToast(context, "success", "已导出");
 }
 
-export function importRules(context: PanelActionContext, content: string): void {
-  const result = parseImportedRulePackage(content);
+export async function importRules(context: PanelActionContext, content: string): Promise<void> {
+  const result = await parseImportedRulePackage(content);
   if (!result.ok) {
     setToast(context, "error", result.error);
     return;

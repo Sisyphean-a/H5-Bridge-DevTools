@@ -92,7 +92,7 @@ export interface ToolbarProps {
   onToggleGlobal: (enabled: boolean) => void;
   onClearLogs: () => void;
   onExportRules: () => void;
-  onImportRules: (content: string) => void;
+  onImportRules: (content: string) => Promise<void>;
   onImportStrategyChange: (value: ImportStrategy) => void;
   onTabChange: (tab: PanelTabId) => void;
   activeTab: PanelTabId;

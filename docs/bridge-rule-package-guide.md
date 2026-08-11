@@ -13,9 +13,9 @@
 | 要填的内容 | 去哪里找 | 示例 |
 | --- | --- | --- |
 | 宿主对象 | H5 调用原生的那一行 | `window.AcmeBridge.postMessage(...)` → `AcmeBridge` |
-| 请求事件 | `postMessage` 传入对象（或 JSON 字符串）的 `event` | `{ event: "openCamera" }` → `openCamera` |
-| 回包事件 | H5 监听的 `window.addEventListener(...)` 第一个参数 | `addEventListener("cameraResult", ...)` → `cameraResult` |
-| 回包数据 | 监听器从 `event.detail` 读取的字段 | `event.detail.uri`、`event.detail.success` |
+| 请求事件字段和值 | `postMessage` 传入对象（或 JSON 字符串）中表示事件的字段 | `{ eg18Code: "openCamera" }` → 字段 `eg18Code`、值 `openCamera` |
+| 回包事件 | H5 的 `window.addEventListener(...)` 事件名，或 `window.dispatchEvent` 拦截器读取的 `event.type` | `addEventListener("cameraResult", ...)` → `cameraResult` |
+| 回包数据 | 监听器或拦截器从 `event.detail` 读取的字段 | `event.detail.uri`、`event.detail.success` |
 
 ### 快速定位，而不是通读代码
 
@@ -41,7 +41,7 @@ bridge.postMessage = function (message, ...rest) {
 // 测完恢复：bridge.postMessage = originalPostMessage;
 ```
 
-若字符串不是 JSON，上面 `JSON.parse` 会报错；此时记录原始字符串，并确认项目实际的请求协议。当前工具只会从对象或 JSON 字符串中读取 `event` 字段。
+若字符串不是 JSON，上面 `JSON.parse` 会报错；此时记录原始字符串，并确认项目实际的请求协议。工具只会从对象或 JSON 字符串的一个顶层字段读取事件；把该字段写入 `profile.requestEventField`，未填写时默认为 `event`。
 
 ## 2. 判断项目是否适用
 
@@ -49,12 +49,12 @@ bridge.postMessage = function (message, ...rest) {
 
 1. H5 通过 `window.<自定义名称>.postMessage(...)` 发请求；
 2. 请求值是对象，或可解析成对象的 JSON 字符串；
-3. 对象中有字符串类型的 `event`；
-4. H5 通过 `window.addEventListener(回包事件, handler)` 接收回包，并从 `handler` 的 `event.detail` 读取数据。
+3. 对象中有一个顶层字符串字段表示事件（把字段名填入 `profile.requestEventField`）；
+4. H5 通过 `window.addEventListener(回包事件, handler)` 接收回包，或拦截 `window.dispatchEvent`，并从 `CustomEvent.detail` 读取数据。
 
 不满足时不要猜：
 
-- 请求事件不在 `event` 字段：当前工具无法自动配对，需要先在 H5 加一层转换；
+- 事件字段不是顶层字符串，或依赖多个字段共同决定事件：当前工具不能自动配对；
 - 回包不是 `CustomEvent`，而是原生回调、Promise 或全局函数：当前工具不能直接模拟；
 - 页面使用 `window.AndroidBridge`、`window.solvivaScope`：可沿用内置方案，也可以导入自己的规则包。
 
@@ -69,6 +69,7 @@ profile:
   id: acme-h5
   title: Acme H5
   hostObject: AcmeBridge
+  requestEventField: event
 settings:
   autoMock: true
   overrideExistingBridge: true
@@ -99,7 +100,8 @@ senders:
   "profile": {
     "id": "acme-h5",
     "title": "Acme H5",
-    "hostObject": "AcmeBridge"
+    "hostObject": "AcmeBridge",
+    "requestEventField": "event"
   },
   "settings": {
     "autoMock": true,
@@ -134,6 +136,7 @@ senders:
 | `profile.id` | 是 | 稳定唯一标识；仅用字母、数字、`.`、`_`、`-`，最多 64 位，以字母或数字开头 |
 | `profile.title` | 是 | 面板显示名称，最多 80 个字符 |
 | `profile.hostObject` | 是 | 不带 `window.`，例如 `AcmeBridge`；必须是自定义 JavaScript 属性名，不能使用 `location`、`alert`、`postMessage` 等浏览器保留名 |
+| `profile.requestEventField` | 否 | 请求对象中保存事件名的顶层字段；必须是 JavaScript 属性名，省略时为 `event`，例如 `eg18Code` |
 | `settings` | 否 | 省略时沿用当前方案的设置 |
 | `settings.autoMock` | 否 | 布尔值；是否自动回包 |
 | `settings.overrideExistingBridge` | 否 | 布尔值；页面已有同名桥接时是否覆盖 |
@@ -180,7 +183,7 @@ window.addEventListener("userInfoResult", (event) => {
         avatar: "https://example.test/avatar.png"
 ```
 
-不要把请求中的 `source`、`payload` 等字段写到 `matchEvent`：当前工具只按 `event` 精确匹配。若同一个 `event` 需要按参数返回不同结果，当前工具不能区分参数；为该事件配置多个候选回包，再在面板中切换活跃回包。
+不要把请求中的 `source`、`payload` 等字段写到 `matchEvent`：工具只按 `profile.requestEventField` 指定的顶层字段精确匹配。若同一个事件需要按参数返回不同结果，当前工具不能区分参数；为该事件配置多个候选回包，再在面板中切换活跃回包。
 
 ## 5. 导入和验收
 
@@ -200,8 +203,8 @@ window.addEventListener("userInfoResult", (event) => {
 | --- | --- |
 | 文件无法导入 | `version` 是否为数字 `1`；YAML 缩进是否正确；所有 `name`、`matchEvent`、`eventName` 是否为非空字符串 |
 | 找不到或无法覆盖桥接 | `hostObject` 不要写 `window.`；确认名称与 H5 调用完全一致；不要使用浏览器保留名 |
-| 有 `SEND` 没有 `MOCK` | `matchEvent` 与真实请求的 `event` 不一致；全局模拟或 `autoMock` 被关闭；该条目没有活跃回包 |
-| 有 `MOCK` 但页面没反应 | `eventName` 不等于 H5 监听事件；`detail` 字段名或类型与 H5 读取方式不一致 |
+| 有 `SEND` 没有 `MOCK` | `profile.requestEventField` 或 `matchEvent` 与真实请求不一致；全局模拟或 `autoMock` 被关闭；该条目没有活跃回包 |
+| 有 `MOCK` 但页面没反应 | `eventName` 不等于 H5 监听/拦截的事件；`detail` 字段名或类型与 H5 读取方式不一致 |
 | 切换/更新方案后旧宿主仍存在 | 刷新目标页面；扩展会恢复已知的非活动 mock 宿主 |
 
 ## 最终交付前检查
@@ -209,7 +212,7 @@ window.addEventListener("userInfoResult", (event) => {
 把下面这份清单和规则包一起交给项目负责人确认：
 
 - [ ] `hostObject` 来自实际 `window.<host>.postMessage` 调用；
-- [ ] 每条 `matchEvent` 来自真实请求的 `event`；
+- [ ] `profile.requestEventField` 来自真实请求的事件字段；每条 `matchEvent` 来自该字段的真实值；
 - [ ] 每条 `eventName` 来自真实 `addEventListener` 监听名；
 - [ ] 每个 `detail` 字段和类型都有真实回包、接口文档或项目负责人作为依据；
 - [ ] 每个 `matchEvent` 在规则包中只出现一次；

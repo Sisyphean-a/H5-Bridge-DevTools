@@ -1,4 +1,4 @@
-import { isBridgeProfile, type BridgeProfile } from "./bridgeProfiles";
+import { normalizeBridgeProfile, type BridgeProfile } from "./bridgeProfiles";
 import { createId } from "./id";
 import type { OriginBridgeSettings } from "./ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
@@ -23,8 +23,9 @@ export function parseRulePackage(value: unknown):
   if (typeof value.name !== "string" || !value.name.trim()) {
     return { ok: false, error: "规则包缺少 name" };
   }
-  if (!isBridgeProfile(value.profile)) {
-    return { ok: false, error: "profile 必须包含合法的 id、title 和 hostObject" };
+  const profile = normalizeBridgeProfile(value.profile);
+  if (!profile) {
+    return { ok: false, error: "profile 必须包含合法的 id、title、hostObject 和 requestEventField" };
   }
   if (!Array.isArray(value.senders)) {
     return { ok: false, error: "规则包缺少 senders 数组" };
@@ -44,11 +45,7 @@ export function parseRulePackage(value: unknown):
     value: {
       version: 1,
       name: value.name.trim(),
-      profile: {
-        id: value.profile.id,
-        title: value.profile.title.trim(),
-        hostObject: value.profile.hostObject,
-      },
+      profile,
       ...(Object.keys(settings.value).length > 0 ? { settings: settings.value } : {}),
       senders: senders.value,
     },

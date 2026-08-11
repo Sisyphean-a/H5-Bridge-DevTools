@@ -1,4 +1,3 @@
-import { parse as parseYaml } from "yaml";
 import type { BridgePanelSnapshot } from "../shared/bridgeTypes";
 import { parseRulePackage, type RulePackage } from "../shared/rulePackage";
 
@@ -21,10 +20,12 @@ export function exportRulePackageFile(snapshot: BridgePanelSnapshot): void {
   URL.revokeObjectURL(url);
 }
 
-export function parseImportedRulePackage(content: string):
+export async function parseImportedRulePackage(content: string): Promise<
   | { ok: true; rulePackage: RulePackage }
-  | { ok: false; error: string } {
+  | { ok: false; error: string }
+> {
   try {
+    const { parse: parseYaml } = await import("yaml");
     const parsed = parseYaml(content);
     const result = parseRulePackage(parsed);
     return result.ok ? { ok: true, rulePackage: result.value } : result;

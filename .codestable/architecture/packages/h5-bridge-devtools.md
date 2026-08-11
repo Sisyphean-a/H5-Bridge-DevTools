@@ -12,7 +12,7 @@ Chrome Manifest V3 DevTools 扩展，在受支持页面中模拟可配置的 And
 
 ## 入口与分层
 
-- `src/devtools/devtools.ts` 创建 DevTools 面板；`src/panel/` 通过 React 展示规则工作区、日志、手动发送和设置。
+- `src/devtools/devtools.ts` 创建 DevTools 面板；`src/panel/` 通过 React 展示规则工作区、日志、手动发送和设置。`vite.config.ts` 对扩展页面禁用 Vite module preload，避免 DevTools 的跨 world 扩展资源失配；YAML 解析器仅在用户选择规则包后动态加载，不参与面板启动。
 - `src/injected/injectMain.ts` 运行在页面主世界：绑定当前方案的宿主对象，捕获 `postMessage`，并把配置的响应回放为 `window` 的 `CustomEvent`。
 - `src/content/controller.ts`、`src/content/runtime.ts` 运行在 content script：读取页面桥接调用、更新当前 origin 的快照、执行规则命令，并监听存储变化。
 - `src/background/serviceWorker.ts` 只接收一次性面板命令并转发到 tab；content script 缺失时，按 main-world injected script、content script 的顺序重新注入并重试。
@@ -28,7 +28,7 @@ Chrome Manifest V3 DevTools 扩展，在受支持页面中模拟可配置的 And
 
 1. 注入脚本按活动方案选择一个页面宿主对象；内置方案定义于 `src/shared/bridgeProfiles.ts`，导入规则包可通过持久状态新增方案，并同步已知宿主对象以恢复非活动 mock。
 2. H5 调用该对象的 `postMessage` 后，注入脚本把原始值和解析结果作为 `BRIDGE_CALL` 发给页面自身。
-3. content controller 提取 `parsedMessage.event`、记录日志，并在全局开关和自动模拟均开启时查找活跃响应。
+3. content controller 按活动方案的 `requestEventField`（默认 `event`）提取解析消息、记录日志，并在全局开关和自动模拟均开启时查找活跃响应。
 4. 命中的响应经延迟后作为 `DISPATCH_EVENT` 回到注入脚本，后者 `dispatchEvent(new CustomEvent(eventName, { detail }))`。
 
 请求与响应的领域语义、匹配边界见 [bridge-simulation](../../requirements/contexts/bridge-simulation.md)。

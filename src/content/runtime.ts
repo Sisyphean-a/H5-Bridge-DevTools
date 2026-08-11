@@ -197,12 +197,15 @@ export function dispatchToPage(eventName: string, detail: unknown): void {
   window.postMessage(payload, "*");
 }
 
-export function readEventName(parsedMessage: unknown): string | undefined {
+export function readEventName(
+  parsedMessage: unknown,
+  requestEventField = "event",
+): string | undefined {
   if (!parsedMessage || typeof parsedMessage !== "object") {
     return undefined;
   }
 
-  const eventName = Reflect.get(parsedMessage, "event");
+  const eventName = Reflect.get(parsedMessage, requestEventField);
   return typeof eventName === "string" ? eventName : undefined;
 }
 

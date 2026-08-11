@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { parseImportedRulePackage } from "./fileActions";
 
 describe("规则包文件导入", () => {
-  it("接受 YAML 规则包并补全缺失的规则 id", () => {
-    const result = parseImportedRulePackage(`
+  it("接受 YAML 规则包并补全缺失的规则 id", async () => {
+    const result = await parseImportedRulePackage(`
 version: 1
 name: Demo 规则包
 profile:
@@ -27,7 +27,12 @@ senders:
       ok: true,
       rulePackage: {
         name: "Demo 规则包",
-        profile: { id: "demo-app", title: "Demo App", hostObject: "DemoBridge" },
+        profile: {
+          id: "demo-app",
+          title: "Demo App",
+          hostObject: "DemoBridge",
+          requestEventField: "event",
+        },
         settings: { autoMock: true },
       },
     });
@@ -42,9 +47,27 @@ senders:
     }
   });
 
-  it("拒绝含循环 detail 的 YAML 规则包", () => {
+  it("接受自定义请求事件字段", async () => {
+    const result = await parseImportedRulePackage(`
+version: 1
+name: Credit 18
+profile:
+  id: credit-18
+  title: Credit 18
+  hostObject: Eg18Bridge
+  requestEventField: eg18Code
+senders: []
+`);
+
+    expect(result).toMatchObject({
+      ok: true,
+      rulePackage: { profile: { requestEventField: "eg18Code" } },
+    });
+  });
+
+  it("拒绝含循环 detail 的 YAML 规则包", async () => {
     expect(
-      parseImportedRulePackage(`
+      await parseImportedRulePackage(`
 version: 1
 name: 循环
 profile: { id: cyclic, title: 循环, hostObject: CyclicBridge }
@@ -63,30 +86,30 @@ senders:
     });
   });
 
-  it("拒绝覆盖保留 window 全局的宿主对象", () => {
+  it("拒绝覆盖保留 window 全局的宿主对象", async () => {
     expect(
-      parseImportedRulePackage(`version: 1\nname: 保留\nprofile: { id: reserved, title: 保留, hostObject: alert }\nsenders: []`),
+      await parseImportedRulePackage(`version: 1\nname: 保留\nprofile: { id: reserved, title: 保留, hostObject: alert }\nsenders: []`),
     ).toEqual({
       ok: false,
-      error: "profile 必须包含合法的 id、title 和 hostObject",
+      error: "profile 必须包含合法的 id、title、hostObject 和 requestEventField",
     });
   });
 
-  it("拒绝只读的 window.undefined 宿主对象", () => {
+  it("拒绝只读的 window.undefined 宿主对象", async () => {
     expect(
-      parseImportedRulePackage(`version: 1\nname: 未定义\nprofile: { id: undefined-host, title: 未定义, hostObject: undefined }\nsenders: []`),
+      await parseImportedRulePackage(`version: 1\nname: 未定义\nprofile: { id: undefined-host, title: 未定义, hostObject: undefined }\nsenders: []`),
     ).toEqual({
       ok: false,
-      error: "profile 必须包含合法的 id、title 和 hostObject",
+      error: "profile 必须包含合法的 id、title、hostObject 和 requestEventField",
     });
   });
 
-  it("拒绝不完整的规则包", () => {
+  it("拒绝不完整的规则包", async () => {
     expect(
-      parseImportedRulePackage(`version: 1\nname: 缺少宿主\nprofile: { id: demo, title: Demo }\nsenders: []`),
+      await parseImportedRulePackage(`version: 1\nname: 缺少宿主\nprofile: { id: demo, title: Demo }\nsenders: []`),
     ).toEqual({
       ok: false,
-      error: "profile 必须包含合法的 id、title 和 hostObject",
+      error: "profile 必须包含合法的 id、title、hostObject 和 requestEventField",
     });
   });
 });

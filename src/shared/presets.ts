@@ -281,14 +281,14 @@ function instantiateSender(seed: PresetSenderSeed): BridgeSender {
 }
 
 export function getPresetSenders(profileId: BridgeProfileId): BridgeSender[] {
-  return presetSenderSeedsByProfile[profileId].map(instantiateSender);
+  return (presetSenderSeedsByProfile[profileId] ?? []).map(instantiateSender);
 }
 
 export function getPresetSenderById(
   profileId: BridgeProfileId,
   presetId: string,
 ): BridgeSender | null {
-  const seed = presetSenderSeedsByProfile[profileId].find((item) => item.id === presetId);
+  const seed = presetSenderSeedsByProfile[profileId]?.find((item) => item.id === presetId);
   return seed ? instantiateSender(seed) : null;
 }
 

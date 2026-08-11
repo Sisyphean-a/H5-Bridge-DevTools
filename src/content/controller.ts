@@ -9,7 +9,7 @@ import { cloneJson } from "../shared/json";
 import { findMatchingSender, getActiveResponse } from "../shared/rules";
 import type { RulePackage } from "../shared/rulePackage";
 import type { ImportStrategy, OriginBridgeSettings } from "../shared/ruleTypes";
-import { importRulePackageIntoOriginState } from "../shared/storage";
+import { getOriginProfile, importRulePackageIntoOriginState } from "../shared/storage";
 import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
 import {
   appendLog,
@@ -104,8 +104,17 @@ async function handlePageMessage(
 }
 
 async function recordBridgeCall(message: PageBridgeCallMessage): Promise<void> {
+  const runtimeState = runtime.state;
+  if (!runtimeState) {
+    return;
+  }
+
   const parsed = message.payload.parsedMessage;
-  const eventName = readEventName(parsed);
+  const activeProfile = getOriginProfile(
+    runtimeState.originState,
+    runtimeState.originState.activeProfileId,
+  );
+  const eventName = readEventName(parsed, activeProfile.requestEventField);
   const payload = parsed ?? message.payload.rawMessage;
 
   await mutateRuntime(runtime, async (state) => {
@@ -117,7 +126,10 @@ async function recordBridgeCall(message: PageBridgeCallMessage): Promise<void> {
   });
 
   if (!eventName) {
-    await pushError("Bridge message has no event field.", payload);
+    await pushError(
+      `Bridge message has no ${activeProfile.requestEventField ?? "event"} field.`,
+      payload,
+    );
     return;
   }
   if (!runtime.state?.globalEnabled || !getActiveProfileState(runtime.state).settings.autoMock) {
