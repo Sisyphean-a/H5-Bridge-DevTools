@@ -5,16 +5,19 @@ import type {
   OriginBridgeProfileState,
   OriginScopedBridgeState,
 } from "../shared/bridgeTypes";
-import type { BridgeProfileId } from "../shared/bridgeProfiles";
 import { SOURCE_EXTENSION, STORAGE_KEY } from "../shared/constants";
-import { createId } from "../shared/id";
-import type { PageDispatchMessage, PageSettingsMessage } from "../shared/messageTypes";
+import type { PageDispatchMessage, PageSettingsMessage, PanelCommandResponse, ApplyStateCommandRequest } from "../shared/messageTypes";
 import { cloneJson } from "../shared/json";
+import { createId } from "../shared/id";
+import {
+  applyCommandToRuntimeState,
+  type StateCommand,
+} from "../shared/stateCommands";
 import {
   createDefaultOriginState,
   getOriginProfile,
+  persistOriginScopedState,
   readOriginScopedState,
-  updateStorageState,
 } from "../shared/storage";
 
 export interface RuntimeState {
@@ -27,12 +30,11 @@ export interface RuntimeState {
 export interface ContentRuntime {
   state: RuntimeState | null;
   ready: Promise<void>;
-  chain: Promise<unknown>;
+  /** 串行执行镜像更新的链；单次失败会被吞掉以保持链可用（H1 恢复）。 */
+  chain: Promise<void>;
 }
 
-export async function initializeRuntime(
-  runtime: ContentRuntime,
-): Promise<BridgePanelSnapshot> {
+export async function initializeRuntime(runtime: ContentRuntime): Promise<void> {
   const href = window.location.href;
   const origin = window.location.origin;
   const { globalEnabled, originState } = await readOriginScopedState(origin);
@@ -51,11 +53,10 @@ export async function initializeRuntime(
   }
 
   if (!preserveLogs && hasLogs) {
-    await persistRuntime(runtime);
+    await persistOriginScopedState(origin, runtime.state.globalEnabled, originState);
   }
 
   syncSettingsToPage(runtime);
-  return getSnapshot(runtime);
 }
 
 export async function reloadRuntimeSnapshot(
@@ -76,43 +77,25 @@ export async function reloadRuntimeSnapshot(
   return getSnapshot(runtime);
 }
 
-export async function mutateRuntime(
+/**
+ * 把确定性的状态增量命令应用到本地镜像，并交给后台串行写入存储。
+ * 命令由调用方完整物化（id/时间戳在命令里），两边应用同一命令后收敛。
+ */
+export async function applyCommand(
   runtime: ContentRuntime,
-  task: (state: RuntimeState) => Promise<void>,
+  command: StateCommand,
 ): Promise<void> {
-  runtime.chain = runtime.chain.then(async () => {
+  const work = runtime.chain.then(async () => {
     if (!runtime.state) {
       return;
     }
-
-    await task(runtime.state);
-    await persistRuntime(runtime);
+    applyCommandToRuntimeState(runtime.state, command);
+    await persistCommand(runtime, command);
   });
-
-  await runtime.chain;
-}
-
-export function appendLog(
-  state: RuntimeState,
-  input: Omit<BridgeLogItem, "id" | "timestamp">,
-): BridgeLogItem[] {
-  const profileState = getActiveProfileState(state);
-  const nextLogs = [
-    {
-      id: createId("log"),
-      timestamp: Date.now(),
-      ...input,
-    },
-    ...profileState.logs,
-  ];
-  return trimLogs(nextLogs, profileState.settings.maxLogCount);
-}
-
-export function trimLogs(
-  logs: BridgeLogItem[],
-  maxLogCount: number,
-): BridgeLogItem[] {
-  return logs.slice(0, Math.max(1, maxLogCount));
+  runtime.chain = work.catch((error: unknown) => {
+    console.warn("[H5Bridge] 状态持久化失败，将在后续写入时重试。", error);
+  });
+  await work;
 }
 
 export function getSnapshot(runtime: ContentRuntime): BridgePanelSnapshot {
@@ -156,7 +139,12 @@ export async function syncRuntimeFromStorageChange(
   changes: Record<string, chrome.storage.StorageChange>,
   areaName: string,
 ): Promise<boolean> {
-  if (areaName !== "local" || !changes[STORAGE_KEY]) {
+  if (areaName !== "local" || !changes[STORAGE_KEY] || !runtime.state) {
+    return false;
+  }
+
+  const change = changes[STORAGE_KEY];
+  if (!didRelevantSliceChange(change, runtime.state.origin)) {
     return false;
   }
 
@@ -209,35 +197,52 @@ export function readEventName(
   return typeof eventName === "string" ? eventName : undefined;
 }
 
-async function persistRuntime(runtime: ContentRuntime): Promise<void> {
-  if (!runtime.state) {
-    return;
-  }
-
-  const activeState = runtime.state;
-  await updateStorageState((state: BridgeStorageState) => ({
-    ...state,
-    globalEnabled: activeState.globalEnabled,
-    origins: {
-      ...state.origins,
-      [activeState.origin]: cloneJson(activeState.originState),
-    },
-  }));
-}
-
-export function setActiveProfile(
-  state: RuntimeState,
-  profileId: BridgeProfileId,
-): void {
-  if (state.originState.profiles[profileId]) {
-    state.originState.activeProfileId = profileId;
-  }
-}
-
 export function getActiveProfileState(
   state: RuntimeState,
 ): OriginBridgeProfileState {
   return state.originState.profiles[state.originState.activeProfileId];
+}
+
+export function createLogEntry(
+  input: Omit<BridgeLogItem, "id" | "timestamp">,
+): BridgeLogItem {
+  return {
+    id: createId("log"),
+    timestamp: Date.now(),
+    ...input,
+  };
+}
+
+async function persistCommand(
+  runtime: ContentRuntime,
+  command: StateCommand,
+): Promise<void> {
+  const message: ApplyStateCommandRequest = {
+    type: "APPLY_STATE_COMMAND",
+    origin: runtime.state?.origin ?? "",
+    command,
+  };
+  const response = (await chrome.runtime.sendMessage(message)) as
+    | PanelCommandResponse
+    | undefined;
+  if (!response?.ok) {
+    throw new Error(response?.message ?? "状态写入失败");
+  }
+}
+
+function didRelevantSliceChange(
+  change: chrome.storage.StorageChange,
+  origin: string,
+): boolean {
+  const before = (change.oldValue as BridgeStorageState | undefined);
+  const after = (change.newValue as BridgeStorageState | undefined);
+  if ((before?.globalEnabled ?? true) !== (after?.globalEnabled ?? true)) {
+    return true;
+  }
+
+  const beforeSlice = before?.origins?.[origin];
+  const afterSlice = after?.origins?.[origin];
+  return JSON.stringify(beforeSlice) !== JSON.stringify(afterSlice);
 }
 
 function mergeSnapshotIntoOriginState(

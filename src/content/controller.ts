@@ -1,51 +1,42 @@
 import { SOURCE_PAGE } from "../shared/constants";
-import type { BridgeProfileId } from "../shared/bridgeProfiles";
 import type {
   PageBridgeCallMessage,
   PanelCommand,
   PanelCommandResponse,
 } from "../shared/messageTypes";
-import { cloneJson } from "../shared/json";
-import { findMatchingSender, getActiveResponse } from "../shared/rules";
+import { sanitizeForStorage } from "../shared/json";
 import type { RulePackage } from "../shared/rulePackage";
-import type { ImportStrategy, OriginBridgeSettings } from "../shared/ruleTypes";
-import { getOriginProfile, importRulePackageIntoOriginState } from "../shared/storage";
-import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
+import type { ImportStrategy } from "../shared/ruleTypes";
 import {
-  appendLog,
+  duplicateSender,
+  findSenderByEvent,
+  getActiveResponse,
+  MAX_RESPONSE_DELAY_MS,
+  mergeImportedSenders,
+} from "../shared/rules";
+import type { BridgeLogItem } from "../shared/bridgeTypes";
+import type { BridgeSender } from "../shared/senderTypes";
+import type { HitCountDelta } from "../shared/stateCommands";
+import { getOriginProfile, importRulePackageIntoOriginState } from "../shared/storage";
+import {
+  applyCommand,
+  createLogEntry,
   dispatchToPage,
   getActiveProfileState,
   initializeRuntime,
-  mutateRuntime,
   readEventName,
-  setActiveProfile,
   syncRuntimeFromStorageChange,
-  type ContentRuntime,
   syncSettingsToPage,
-  trimLogs,
+  type ContentRuntime,
 } from "./runtime";
-import {
-  deleteResponseState,
-  deleteSenderState,
-  duplicateSenderState,
-  importSendersState,
-  setActiveResponseState,
-  updateHitCountState,
-  upsertResponseState,
-  upsertSenderState,
-} from "./senderState";
 
 const runtime = createRuntime();
 
 export function bootstrapContentScript(): void {
-  runtime.ready = initialize().then(() => undefined);
+  runtime.ready = initializeRuntime(runtime);
   chrome.runtime.onMessage.addListener(handleRuntimeMessage);
   chrome.storage.onChanged.addListener(handleStorageChange);
   window.addEventListener("message", handleWindowMessage);
-}
-
-async function initialize() {
-  return initializeRuntime(runtime);
 }
 
 function createRuntime(): ContentRuntime {
@@ -80,11 +71,19 @@ function handleStorageChange(
   changes: Record<string, chrome.storage.StorageChange>,
   areaName: string,
 ): void {
-  void runtime.ready.then(() => syncRuntimeFromStorageChange(runtime, changes, areaName));
+  void runtime.ready
+    .then(() => syncRuntimeFromStorageChange(runtime, changes, areaName))
+    .catch((error: unknown) => {
+      console.warn("[H5Bridge] 刷新存储快照失败。", error);
+    });
 }
 
 function handleWindowMessage(event: MessageEvent<PageBridgeCallMessage>): void {
-  void runtime.ready.then(() => handlePageMessage(event));
+  void runtime.ready
+    .then(() => handlePageMessage(event))
+    .catch((error: unknown) => {
+      console.warn("[H5Bridge] 处理页面桥接调用失败。", error);
+    });
 }
 
 async function handlePageMessage(
@@ -109,55 +108,62 @@ async function recordBridgeCall(message: PageBridgeCallMessage): Promise<void> {
     return;
   }
 
-  const parsed = message.payload.parsedMessage;
   const activeProfile = getOriginProfile(
     runtimeState.originState,
     runtimeState.originState.activeProfileId,
   );
-  const eventName = readEventName(parsed, activeProfile.requestEventField);
-  const payload = parsed ?? message.payload.rawMessage;
+  const safeParsed = sanitizeForStorage(message.payload.parsedMessage);
+  const eventName = readEventName(safeParsed, activeProfile.requestEventField);
+  const payload = safeParsed ?? sanitizeForStorage(message.payload.rawMessage);
 
-  await mutateRuntime(runtime, async (state) => {
-    getActiveProfileState(state).logs = appendLog(state, {
-      type: "SEND",
-      event: eventName,
-      payload,
-    });
-  });
+  const sendLog = createLogEntry({ type: "SEND", event: eventName, payload });
+  let extraLog: BridgeLogItem | null = null;
+  let hit: HitCountDelta | null = null;
 
   if (!eventName) {
-    await pushError(
-      `Bridge message has no ${activeProfile.requestEventField ?? "event"} field.`,
+    extraLog = createLogEntry({
+      type: "ERROR",
       payload,
-    );
-    return;
-  }
-  if (!runtime.state?.globalEnabled || !getActiveProfileState(runtime.state).settings.autoMock) {
-    return;
+      message: `Bridge message has no ${activeProfile.requestEventField ?? "event"} field.`,
+    });
+  } else if (runtimeState.globalEnabled && getActiveProfileState(runtimeState).settings.autoMock) {
+    const sender = findSenderByEvent(getActiveProfileState(runtimeState).senders, eventName);
+    if (!sender) {
+      extraLog = createLogEntry({
+        type: "WARN",
+        event: eventName,
+        payload,
+        message: `No sender matched for event "${eventName}".`,
+      });
+    } else {
+      const activeResponse = getActiveResponse(sender);
+      if (!activeResponse) {
+        extraLog = createLogEntry({
+          type: "WARN",
+          event: eventName,
+          payload,
+          message: `Sender "${sender.name}" has no active response.`,
+        });
+      } else {
+        hit = { senderId: sender.id, responseId: activeResponse.id, now: Date.now() };
+        const senderId = sender.id;
+        const responseId = activeResponse.id;
+        const delayMs = Math.min(activeResponse.delayMs, MAX_RESPONSE_DELAY_MS);
+        window.setTimeout(() => {
+          void dispatchActiveResponse(senderId, responseId).catch((error: unknown) => {
+            console.warn("[H5Bridge] 派发自动回包失败。", error);
+          });
+        }, delayMs);
+      }
+    }
   }
 
-  const matchedSender = findMatchingSender(getActiveProfileState(runtime.state).senders, eventName);
-  if (!matchedSender) {
-    await pushWarn(eventName, payload, `No sender matched for event "${eventName}".`);
-    return;
-  }
-
-  const activeResponse = getActiveResponse(matchedSender);
-  if (!activeResponse) {
-    await pushWarn(
-      eventName,
-      payload,
-      `Sender "${matchedSender.name}" has no active response.`,
-    );
-    return;
-  }
-
-  await updateHitCount(matchedSender.id, activeResponse.id);
-  const senderId = matchedSender.id;
-  const responseId = activeResponse.id;
-  window.setTimeout(() => {
-    void dispatchActiveResponse(senderId, responseId);
-  }, activeResponse.delayMs);
+  await applyCommand(runtime, {
+    type: "RECORD_BRIDGE_CALL",
+    log: sendLog,
+    extraLog,
+    hit,
+  });
 }
 
 async function handlePanelCommand(command: PanelCommand): Promise<void> {
@@ -165,25 +171,40 @@ async function handlePanelCommand(command: PanelCommand): Promise<void> {
     case "REQUEST_SNAPSHOT":
       return;
     case "SET_ACTIVE_PROFILE":
-      await changeActiveProfile(command.profileId);
+      await applyCommand(runtime, { type: "SET_ACTIVE_PROFILE", profileId: command.profileId });
+      syncSettingsToPage(runtime);
       return;
     case "UPSERT_SENDER":
-      await upsertSender(command.sender);
+      await applyCommand(runtime, { type: "UPSERT_SENDER", sender: command.sender, now: Date.now() });
       return;
     case "DELETE_SENDER":
-      await deleteSender(command.senderId);
+      await applyCommand(runtime, { type: "DELETE_SENDER", senderId: command.senderId });
       return;
     case "DUPLICATE_SENDER":
       await duplicateSenderById(command.senderId);
       return;
     case "SET_ACTIVE_RESPONSE":
-      await setActiveResponse(command.senderId, command.responseId);
+      await applyCommand(runtime, {
+        type: "SET_ACTIVE_RESPONSE",
+        senderId: command.senderId,
+        responseId: command.responseId,
+        now: Date.now(),
+      });
       return;
     case "UPSERT_RESPONSE":
-      await upsertResponse(command.senderId, command.response);
+      await applyCommand(runtime, {
+        type: "UPSERT_RESPONSE",
+        senderId: command.senderId,
+        response: command.response,
+        now: Date.now(),
+      });
       return;
     case "DELETE_RESPONSE":
-      await deleteResponse(command.senderId, command.responseId);
+      await applyCommand(runtime, {
+        type: "DELETE_RESPONSE",
+        senderId: command.senderId,
+        responseId: command.responseId,
+      });
       return;
     case "TRIGGER_RESPONSE":
       await triggerResponse(command.senderId, command.responseId);
@@ -195,13 +216,15 @@ async function handlePanelCommand(command: PanelCommand): Promise<void> {
       await importRulePackage(command.rulePackage, command.strategy);
       return;
     case "CLEAR_LOGS":
-      await clearLogs();
+      await applyCommand(runtime, { type: "CLEAR_LOGS" });
       return;
     case "SET_GLOBAL_ENABLED":
-      await setGlobalEnabled(command.enabled);
+      await applyCommand(runtime, { type: "SET_GLOBAL_ENABLED", enabled: command.enabled });
+      syncSettingsToPage(runtime);
       return;
     case "UPDATE_SETTINGS":
-      await updateSettings(command.settings);
+      await applyCommand(runtime, { type: "UPDATE_SETTINGS", settings: command.settings });
+      syncSettingsToPage(runtime);
       return;
     case "MANUAL_EMIT":
       await manualEmit(command.eventName, command.detail);
@@ -212,33 +235,19 @@ async function handlePanelCommand(command: PanelCommand): Promise<void> {
   }
 }
 
-async function upsertSender(sender: BridgeSender) {
-  const now = Date.now();
-  await updateSenders((senders) => upsertSenderState(senders, sender, now));
-}
-
-async function deleteSender(senderId: string) {
-  await updateSenders((senders) => deleteSenderState(senders, senderId));
-}
-
 async function duplicateSenderById(senderId: string) {
-  await updateSenders((senders) => duplicateSenderState(senders, senderId));
-}
+  const sender = runtime.state
+    ? getActiveProfileState(runtime.state).senders.find((item) => item.id === senderId)
+    : undefined;
+  if (!sender) {
+    return;
+  }
 
-async function setActiveResponse(senderId: string, responseId: string | null) {
-  const now = Date.now();
-  await updateSenders((senders) =>
-    setActiveResponseState(senders, senderId, responseId, now),
-  );
-}
-
-async function upsertResponse(senderId: string, response: BridgeResponseOption) {
-  const now = Date.now();
-  await updateSenders((senders) => upsertResponseState(senders, senderId, response, now));
-}
-
-async function deleteResponse(senderId: string, responseId: string) {
-  await updateSenders((senders) => deleteResponseState(senders, senderId, responseId));
+  await applyCommand(runtime, {
+    type: "UPSERT_SENDER",
+    sender: duplicateSender(sender),
+    now: Date.now(),
+  });
 }
 
 async function triggerResponse(senderId: string, responseId: string) {
@@ -250,81 +259,44 @@ async function triggerResponse(senderId: string, responseId: string) {
     return;
   }
 
-  dispatchToPage(response.eventName, response.detail);
-  await mutateRuntime(runtime, async (state) => {
-    getActiveProfileState(state).logs = appendLog(state, {
-      type: "EMIT",
-      event: response.eventName,
-      response: response.detail,
-    });
+  await applyCommand(runtime, {
+    type: "APPEND_LOG",
+    log: createLogEntry({ type: "EMIT", event: response.eventName, response: response.detail }),
   });
+  dispatchToPage(response.eventName, response.detail);
 }
 
 async function importSenders(
   senders: BridgeSender[],
   strategy: ImportStrategy,
 ) {
-  await updateSenders((current) => importSendersState(current, senders, strategy));
+  const current = runtime.state ? getActiveProfileState(runtime.state).senders : [];
+  const merged = mergeImportedSenders(current, senders, strategy);
+  await applyCommand(runtime, { type: "REPLACE_SENDERS", senders: merged });
 }
 
 async function importRulePackage(
   rulePackage: RulePackage,
   strategy: ImportStrategy,
 ) {
-  await mutateRuntime(runtime, async (state) => {
-    state.originState = importRulePackageIntoOriginState(
-      state.originState,
-      rulePackage,
-      strategy,
-    );
-  });
-  syncSettingsToPage(runtime);
-}
-
-async function clearLogs() {
-  await mutateRuntime(runtime, async (state) => {
-    getActiveProfileState(state).logs = [];
-  });
-}
-
-async function changeActiveProfile(profileId: BridgeProfileId) {
-  await mutateRuntime(runtime, async (state) => {
-    setActiveProfile(state, profileId);
-  });
-  syncSettingsToPage(runtime);
-}
-
-async function setGlobalEnabled(enabled: boolean) {
-  await mutateRuntime(runtime, async (state) => {
-    state.globalEnabled = enabled;
-  });
-  syncSettingsToPage(runtime);
-}
-
-async function updateSettings(settings: Partial<OriginBridgeSettings>) {
-  await mutateRuntime(runtime, async (state) => {
-    const profileState = getActiveProfileState(state);
-    profileState.settings = {
-      ...profileState.settings,
-      ...settings,
-    };
-    profileState.logs = trimLogs(
-      profileState.logs,
-      profileState.settings.maxLogCount,
-    );
-  });
+  if (!runtime.state) {
+    return;
+  }
+  const next = importRulePackageIntoOriginState(
+    runtime.state.originState,
+    rulePackage,
+    strategy,
+  );
+  await applyCommand(runtime, { type: "REPLACE_ORIGIN_STATE", originState: next });
   syncSettingsToPage(runtime);
 }
 
 async function manualEmit(eventName: string, detail: unknown) {
-  dispatchToPage(eventName, detail);
-  await mutateRuntime(runtime, async (state) => {
-    getActiveProfileState(state).logs = appendLog(state, {
-      type: "EMIT",
-      event: eventName,
-      response: detail,
-    });
+  await applyCommand(runtime, {
+    type: "APPEND_LOG",
+    log: createLogEntry({ type: "EMIT", event: eventName, response: detail }),
   });
+  dispatchToPage(eventName, detail);
 }
 
 async function replayLogResponse(logId: string) {
@@ -335,62 +307,42 @@ async function replayLogResponse(logId: string) {
     return;
   }
 
-  await manualEmit(log.event, cloneJson(log.response ?? {}));
+  const detail = sanitizeForStorage(log.response ?? {});
+  await applyCommand(runtime, {
+    type: "APPEND_LOG",
+    log: createLogEntry({ type: "EMIT", event: log.event, response: detail }),
+  });
+  dispatchToPage(log.event, detail);
 }
 
 async function dispatchActiveResponse(senderId: string, responseId: string) {
-  const sender = runtime.state
-    ? getActiveProfileState(runtime.state).senders.find((item) => item.id === senderId)
-    : undefined;
-  const response = sender?.responses.find((item) => item.id === responseId);
-  if (!sender || !response || !runtime.state?.globalEnabled) {
+  const state = runtime.state;
+  if (!state || !state.globalEnabled) {
+    return;
+  }
+  const profileState = getActiveProfileState(state);
+  if (!profileState.settings.autoMock) {
+    return;
+  }
+  const sender = profileState.senders.find((item) => item.id === senderId);
+  if (!sender || sender.activeResponseId !== responseId) {
+    return;
+  }
+  const response = sender.responses.find((item) => item.id === responseId);
+  if (!response) {
     return;
   }
 
-  dispatchToPage(response.eventName, response.detail);
-  await mutateRuntime(runtime, async (state) => {
-    getActiveProfileState(state).logs = appendLog(state, {
+  await applyCommand(runtime, {
+    type: "APPEND_LOG",
+    log: createLogEntry({
       type: "MOCK",
       event: response.eventName,
       response: response.detail,
       ruleId: sender.id,
-    });
+    }),
   });
-}
-
-async function updateHitCount(senderId: string, responseId: string) {
-  const now = Date.now();
-  await updateSenders((senders) => updateHitCountState(senders, senderId, responseId, now));
-}
-
-async function pushWarn(eventName: string, payload: unknown, message: string) {
-  await mutateRuntime(runtime, async (state) => {
-    getActiveProfileState(state).logs = appendLog(state, {
-      type: "WARN",
-      event: eventName,
-      payload,
-      message,
-    });
-  });
-}
-
-async function pushError(message: string, payload: unknown) {
-  await mutateRuntime(runtime, async (state) => {
-    getActiveProfileState(state).logs = appendLog(state, {
-      type: "ERROR",
-      payload,
-      message,
-    });
-  });
-}
-
-async function updateSenders(
-  updater: (senders: BridgeSender[]) => BridgeSender[],
-): Promise<void> {
-  await mutateRuntime(runtime, async (state) => {
-    const profileState = getActiveProfileState(state);
-    profileState.senders = updater(profileState.senders);
-  });
+  dispatchToPage(response.eventName, response.detail);
 }
 
 function isBackgroundCommandMessage(

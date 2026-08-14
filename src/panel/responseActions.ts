@@ -1,6 +1,6 @@
 import { createBlankResponse } from "../shared/presets";
 import { safeParseJson } from "../shared/json";
-import { validateResponse } from "../shared/rules";
+import { MAX_RESPONSE_DELAY_MS, validateResponse } from "../shared/rules";
 import type { BridgeResponseOption } from "../shared/senderTypes";
 import {
   createStandaloneSender,
@@ -185,6 +185,9 @@ function buildResponseFromDraft(
   const delayMs = Number(draft.delayMs);
   if (!Number.isFinite(delayMs) || delayMs < 0) {
     return { ok: false, error: "Delay 必须是大于等于 0 的数字" };
+  }
+  if (delayMs > MAX_RESPONSE_DELAY_MS) {
+    return { ok: false, error: `Delay 不能超过 24 小时（${MAX_RESPONSE_DELAY_MS} 毫秒）` };
   }
   return {
     ok: true,

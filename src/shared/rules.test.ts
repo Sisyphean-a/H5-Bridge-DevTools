@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_RESPONSE_DELAY_MS,
+  findSenderByEvent,
   findMatchingSender,
   findEquivalentResponseIndex,
   mergeImportedSenders,
   normalizeSenders,
+  validateResponse,
 } from "./rules";
 import { createResponse, createSender } from "../test/factories";
 import { createStandaloneSender } from "./standaloneSender";
@@ -110,5 +113,29 @@ describe("shared rules behavior", () => {
     standalone.activeResponseId = standalone.responses[0]?.id ?? null;
 
     expect(findMatchingSender([standalone, active], "login")?.id).toBe("sender-b");
+  });
+
+  it("findSenderByEvent 只按 matchEvent 匹配，不要求活跃响应", () => {
+    const unpaired = createSender("sender-a", {
+      matchEvent: "login",
+      activeResponseId: null,
+    });
+    const standalone = createStandaloneSender([createResponse("resp-standalone")]);
+    standalone.matchEvent = "login";
+
+    expect(findSenderByEvent([unpaired, standalone], "login")?.id).toBe("sender-a");
+    expect(findSenderByEvent([], "login")).toBeUndefined();
+  });
+
+  it("validateResponse 拒绝超过 24 小时的延迟", () => {
+    expect(
+      validateResponse(createResponse("resp-1", { delayMs: MAX_RESPONSE_DELAY_MS })),
+    ).toEqual([]);
+    expect(
+      validateResponse(createResponse("resp-2", { delayMs: MAX_RESPONSE_DELAY_MS + 1 })).length,
+    ).toBeGreaterThan(0);
+    expect(
+      validateResponse(createResponse("resp-3", { delayMs: Number.POSITIVE_INFINITY })).length,
+    ).toBeGreaterThan(0);
   });
 });

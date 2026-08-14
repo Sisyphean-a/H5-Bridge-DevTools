@@ -2,6 +2,7 @@ import type { ImportStrategy, OriginBridgeSettings } from "./ruleTypes";
 import type { BridgeProfile, BridgeProfileId } from "./bridgeProfiles";
 import type { RulePackage } from "./rulePackage";
 import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
+import type { StateCommand } from "./stateCommands";
 
 export type PanelCommand =
   | { type: "REQUEST_SNAPSHOT" }
@@ -30,6 +31,12 @@ export interface PanelCommandRequest {
 export type PanelCommandResponse =
   | { ok: true }
   | { ok: false; message: string };
+
+export interface ApplyStateCommandRequest {
+  type: "APPLY_STATE_COMMAND";
+  origin: string;
+  command: StateCommand;
+}
 
 export type BackgroundToContentMessage = {
   type: "BACKGROUND_COMMAND";

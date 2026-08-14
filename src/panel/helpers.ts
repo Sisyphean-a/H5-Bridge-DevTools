@@ -184,3 +184,59 @@ export function isExtensionContextInvalidatedError(error: unknown): boolean {
     error.message.includes("Extension context invalidated")
   );
 }
+
+/**
+ * 判断 url 是否命中任一 Chrome match pattern（仅覆盖本扩展用到的
+ * scheme://host[:port]/* 形式与 <all_urls>）。
+ */
+export function matchesContentScriptPattern(url: string, patterns: string[]): boolean {
+  let parsed: URL | null = null;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  return patterns.some((pattern) => matchPattern(parsed, pattern));
+}
+
+function matchPattern(url: URL, pattern: string): boolean {
+  if (pattern === "<all_urls>") {
+    return true;
+  }
+
+  const schemeEnd = pattern.indexOf("://");
+  if (schemeEnd < 0) {
+    return false;
+  }
+  const scheme = pattern.slice(0, schemeEnd);
+  const rest = pattern.slice(schemeEnd + 3);
+  const pathStart = rest.indexOf("/");
+  const hostPort = pathStart >= 0 ? rest.slice(0, pathStart) : rest;
+
+  if (scheme !== "*" && url.protocol !== `${scheme}:`) {
+    return false;
+  }
+
+  const colon = hostPort.lastIndexOf(":");
+  const host = colon >= 0 ? hostPort.slice(0, colon) : hostPort;
+  const port = colon >= 0 ? hostPort.slice(colon + 1) : "*";
+  if (!hostMatches(host, url.hostname)) {
+    return false;
+  }
+  if (port !== "*" && port !== url.port) {
+    return false;
+  }
+  return true;
+}
+
+function hostMatches(patternHost: string, actualHost: string): boolean {
+  if (patternHost === "*") {
+    return true;
+  }
+  if (patternHost.startsWith("*.")) {
+    const suffix = patternHost.slice(1);
+    return actualHost === patternHost.slice(2) || actualHost.endsWith(suffix);
+  }
+  return patternHost === actualHost;
+}

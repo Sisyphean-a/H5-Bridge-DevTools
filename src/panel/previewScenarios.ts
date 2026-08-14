@@ -10,20 +10,20 @@ export function runPreviewScenario(): void {
 async function applyScenario(scenario: string): Promise<void> {
   switch (scenario) {
     case "responses":
-      await clickText(".subtab-button", "响应");
+      await clickText(".subtab-button", "安卓 -> H5");
       break;
     case "matches":
-      await clickText(".subtab-button", "匹配");
+      await clickText(".subtab-button", "自动配对");
       break;
     case "sender-detail":
       await clickText(".row-card", "登录");
       break;
     case "response-detail":
-      await clickText(".subtab-button", "响应");
+      await clickText(".subtab-button", "安卓 -> H5");
       await clickText(".row-card", "登录成功");
       break;
     case "match-close":
-      await clickText(".subtab-button", "匹配");
+      await clickText(".subtab-button", "自动配对");
       await clickText(".match-card__sender.is-active", "登录");
       break;
   }

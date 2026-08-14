@@ -11,6 +11,19 @@ type LegacyBridgeSender = BridgeSender & {
   lastActiveResponseId?: string | null;
 };
 
+/** setTimeout 在超过 2^31-1 毫秒（约 24.8 天）时会立即触发，因此钳制回放延迟。 */
+export const MAX_RESPONSE_DELAY_MS = 24 * 60 * 60 * 1000;
+
+/** 按 matchEvent 找第一个非独立安卓发送的发送条目，不检查活跃响应。 */
+export function findSenderByEvent(
+  senders: BridgeSender[],
+  eventName: string,
+): BridgeSender | undefined {
+  return senders.find(
+    (sender) => !isStandaloneSender(sender) && sender.matchEvent === eventName,
+  );
+}
+
 export function findMatchingSender(
   senders: BridgeSender[],
   eventName: string,
@@ -135,6 +148,9 @@ export function validateResponse(response: BridgeResponseOption): string[] {
   }
   if (!Number.isFinite(response.delayMs) || response.delayMs < 0) {
     errors.push("延迟必须是大于等于 0 的数字");
+  }
+  if (Number.isFinite(response.delayMs) && response.delayMs > MAX_RESPONSE_DELAY_MS) {
+    errors.push(`延迟不能超过 24 小时（${MAX_RESPONSE_DELAY_MS} 毫秒）`);
   }
 
   return errors;

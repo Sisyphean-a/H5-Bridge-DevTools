@@ -1,4 +1,4 @@
-import { cloneJson } from "../shared/json";
+import { cloneJson } from "./json";
 import {
   duplicateSender,
   findEquivalentResponseIndex,
@@ -6,9 +6,9 @@ import {
   normalizeResponseSelection,
   normalizeSenders,
   selectSenderResponse,
-} from "../shared/rules";
-import type { ImportStrategy } from "../shared/ruleTypes";
-import type { BridgeResponseOption, BridgeSender } from "../shared/senderTypes";
+} from "./rules";
+import type { ImportStrategy } from "./ruleTypes";
+import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
 
 export function upsertSenderState(
   senders: BridgeSender[],
@@ -155,30 +155,28 @@ export function updateHitCountState(
   responseId: string,
   now = Date.now(),
 ): BridgeSender[] {
-  return normalizeSenders(
-    senders.map((sender) =>
-      sender.id === senderId
-        ? {
-            ...sender,
-            responses: sender.responses.map((response) =>
-              response.id === responseId
-                ? {
-                    ...response,
-                    meta: {
-                      ...response.meta,
-                      updatedAt: now,
-                      hitCount: (response.meta?.hitCount ?? 0) + 1,
-                    },
-                  }
-                : response,
-            ),
-            meta: {
-              ...sender.meta,
-              updatedAt: now,
-              hitCount: (sender.meta?.hitCount ?? 0) + 1,
-            },
-          }
-        : sender,
-    ),
+  return senders.map((sender) =>
+    sender.id === senderId
+      ? {
+          ...sender,
+          responses: sender.responses.map((response) =>
+            response.id === responseId
+              ? {
+                  ...response,
+                  meta: {
+                    ...response.meta,
+                    updatedAt: now,
+                    hitCount: (response.meta?.hitCount ?? 0) + 1,
+                  },
+                }
+              : response,
+          ),
+          meta: {
+            ...sender.meta,
+            updatedAt: now,
+            hitCount: (sender.meta?.hitCount ?? 0) + 1,
+          },
+        }
+      : sender,
   );
 }

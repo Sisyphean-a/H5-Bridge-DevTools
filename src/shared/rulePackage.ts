@@ -1,5 +1,6 @@
 import { normalizeBridgeProfile, type BridgeProfile } from "./bridgeProfiles";
 import { createId } from "./id";
+import { MAX_RESPONSE_DELAY_MS } from "./rules";
 import type { OriginBridgeSettings } from "./ruleTypes";
 import type { BridgeResponseOption, BridgeSender } from "./senderTypes";
 
@@ -106,11 +107,12 @@ function parseSenders(value: unknown[]):
         !isText(response.eventName) ||
         typeof response.delayMs !== "number" ||
         !Number.isFinite(response.delayMs) ||
-        response.delayMs < 0
+        response.delayMs < 0 ||
+        response.delayMs > MAX_RESPONSE_DELAY_MS
       ) {
         return {
           ok: false,
-          error: `senders[${index}].responses[${responseIndex}] 必须包含 name、非负 delayMs 和 eventName`,
+          error: `senders[${index}].responses[${responseIndex}] 必须包含 name、0 到 24 小时之间的 delayMs 和 eventName`,
         };
       }
       if (response.mode !== undefined && response.mode !== "dispatchEvent") {

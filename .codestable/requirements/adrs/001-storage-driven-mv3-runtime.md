@@ -16,8 +16,9 @@ Chrome 可回收 Manifest V3 service worker。若 content script、DevTools pane
 - panel 用一次性 `runtime.sendMessage` 发出命令；background 无状态地用 `tabs.sendMessage` 转发。
 - 若 tab 没有 content 收件端，background 先程序化注入 `injectMain.js` 和 `contentScript.js`，再重试一次命令。
 - 注入脚本必须幂等，以允许恢复路径重复执行。
+- **状态写入**（2026-08-14 演进）：content script 不直接写 storage，而是把自包含、确定性的状态增量命令（`APPLY_STATE_COMMAND`）发给 background，由 background 在内存队列中串行执行“读最新状态 → 应用命令 → 写回”。单次写入失败只影响该命令，队列与内容脚本写链都会恢复；写入仍依赖可被唤醒的一次性消息，不依赖常驻 worker 内存。
 
-代码锚点：`src/background/serviceWorker.ts`、`src/content/controller.ts`、`src/content/runtime.ts`、`src/panel/runtimeBridge.ts`、`src/injected/injectMain.ts`。
+代码锚点：`src/background/serviceWorker.ts`、`src/content/controller.ts`、`src/content/runtime.ts`、`src/shared/stateCommands.ts`、`src/panel/runtimeBridge.ts`、`src/injected/injectMain.ts`。
 
 ## 备选方案
 

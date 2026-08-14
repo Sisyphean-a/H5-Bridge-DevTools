@@ -1,6 +1,6 @@
 import { useMemo, useState, type CSSProperties } from "react";
 import type { BridgeLogItem, BridgeLogType } from "../../shared/bridgeTypes";
-import { formatJson } from "../../shared/json";
+import { boundedJsonText, formatJson } from "../../shared/json";
 import { logTypeColors, panelTheme } from "../designSystem";
 import type { LogsPanelProps } from "../types";
 
@@ -12,6 +12,8 @@ const logFilterTypes: Array<BridgeLogType | "ALL"> = [
   "WARN",
   "ERROR",
 ];
+
+const searchDetailBudget = 4096;
 
 export function LogsPanel({
   logs,
@@ -29,6 +31,24 @@ export function LogsPanel({
   const [typeFilter, setTypeFilter] = useState<BridgeLogType | "ALL">("ALL");
   const [searchText, setSearchText] = useState("");
 
+  const searchIndex = useMemo(() => {
+    const index = new Map<string, string>();
+    for (const log of logs) {
+      const detail = log.response ?? log.payload;
+      index.set(
+        log.id,
+        [
+          log.event ?? "",
+          log.message ?? "",
+          detail ? boundedJsonText(detail, searchDetailBudget) : "",
+        ]
+          .join("\n")
+          .toLowerCase(),
+      );
+    }
+    return index;
+  }, [logs]);
+
   const visibleLogs = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
     return logs.filter((log) => {
@@ -38,16 +58,10 @@ export function LogsPanel({
       if (!keyword) {
         return true;
       }
-      const eventText = (log.event ?? "").toLowerCase();
-      const messageText = (log.message ?? "").toLowerCase();
-      const detailText = formatJson(log.response ?? log.payload ?? {}).toLowerCase();
-      return (
-        eventText.includes(keyword) ||
-        messageText.includes(keyword) ||
-        detailText.includes(keyword)
-      );
+      const text = searchIndex.get(log.id) ?? "";
+      return text.includes(keyword);
     });
-  }, [logs, searchText, typeFilter]);
+  }, [logs, searchIndex, searchText, typeFilter]);
 
   return (
     <section
@@ -445,7 +459,7 @@ function buildSummary(log: BridgeLogItem): string {
 }
 
 function summarizeJson(value: unknown): string {
-  const text = formatJson(value).replace(/\s+/g, " ").trim();
+  const text = boundedJsonText(value, 320).replace(/\s+/g, " ").trim();
   return text.length > 120 ? `${text.slice(0, 117)}...` : text;
 }
 

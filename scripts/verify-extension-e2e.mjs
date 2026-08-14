@@ -228,9 +228,9 @@ async function readTabId(worker, url) {
 }
 
 async function openCameraSuccessResponse(panelPage) {
-  await panelPage.getByText("响应", { exact: true }).click();
+  await panelPage.getByText("安卓 -> H5", { exact: true }).click();
   await panelPage
-    .getByPlaceholder("按响应名、发送名或事件名搜索")
+    .getByPlaceholder("按消息名、归属或事件名搜索")
     .fill("openCamera");
   await panelPage.getByText("相机成功", { exact: true }).click();
   await panelPage.waitForFunction(
@@ -243,7 +243,7 @@ async function overwriteResponseJson(panelPage, text) {
 }
 
 async function saveResponse(panelPage) {
-  await panelPage.getByText("保存响应", { exact: true }).click();
+  await panelPage.getByText("保存发送", { exact: true }).click();
   await panelPage.waitForFunction(
     () => document.body.textContent?.includes("响应已保存") ?? false,
   );

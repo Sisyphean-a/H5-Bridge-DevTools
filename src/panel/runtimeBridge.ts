@@ -1,6 +1,6 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { BridgePanelSnapshot } from "../shared/bridgeTypes";
+import type { BridgePanelSnapshot, BridgeStorageState } from "../shared/bridgeTypes";
 import { STORAGE_KEY } from "../shared/constants";
 import type {
   PanelCommandRequest,
@@ -11,6 +11,7 @@ import { setToast } from "./actionContext";
 import {
   hasActiveExtensionRuntime,
   isExtensionContextInvalidatedError,
+  matchesContentScriptPattern,
   syncSnapshotState,
 } from "./helpers";
 import type { AppViewState } from "./types";
@@ -26,6 +27,7 @@ export function usePanelRuntime(
   tabId: number,
   setState: Dispatch<SetStateAction<AppViewState>>,
 ): (message: PanelCommandRequest) => void {
+  const originRef = useRef<string | null>(null);
   const dispatchRuntimeMessage = useMemo(
     () => (message: PanelCommandRequest) => {
       void sendPanelCommand(message, setState);
@@ -42,6 +44,7 @@ export function usePanelRuntime(
         if (disposed) {
           return;
         }
+        originRef.current = snapshot?.origin ?? null;
         setState((current) =>
           snapshot ? syncSnapshotState(current, snapshot) : { ...current, snapshot: null },
         );
@@ -67,6 +70,11 @@ export function usePanelRuntime(
       if (areaName !== "local" || !changes[STORAGE_KEY]) {
         return;
       }
+      const change = changes[STORAGE_KEY];
+      const origin = originRef.current;
+      if (origin && !didRelevantSliceChange(change, origin)) {
+        return;
+      }
       void refreshSnapshot();
     };
 
@@ -87,6 +95,7 @@ export function usePanelRuntime(
       if (removedTabId !== tabId || disposed) {
         return;
       }
+      originRef.current = null;
       setState((current) => ({ ...current, snapshot: null }));
     };
 
@@ -121,6 +130,15 @@ async function ensureTabReady(
   setState: Dispatch<SetStateAction<AppViewState>>,
 ): Promise<boolean> {
   try {
+    const location = await getTabLocation(tabId);
+    if (!location) {
+      return true;
+    }
+    if (!isSupportedPage(location.href)) {
+      // 当前页面不在扩展的 host 权限内：静默降级，只展示存储里的状态。
+      return true;
+    }
+
     const response = await sendRuntimeMessage({
       type: "PANEL_COMMAND",
       tabId,
@@ -135,6 +153,14 @@ async function ensureTabReady(
     setToast({ setState }, "error", toErrorMessage(error));
     return false;
   }
+}
+
+function isSupportedPage(href: string): boolean {
+  const manifest = chrome.runtime.getManifest();
+  const patterns = (manifest.content_scripts ?? []).flatMap(
+    (script) => script.matches ?? [],
+  );
+  return matchesContentScriptPattern(href, patterns);
 }
 
 async function sendPanelCommand(
@@ -193,6 +219,21 @@ async function getTabLocation(
     }
     throw error;
   }
+}
+
+function didRelevantSliceChange(
+  change: chrome.storage.StorageChange,
+  origin: string,
+): boolean {
+  const before = change.oldValue as BridgeStorageState | undefined;
+  const after = change.newValue as BridgeStorageState | undefined;
+  if ((before?.globalEnabled ?? true) !== (after?.globalEnabled ?? true)) {
+    return true;
+  }
+
+  const beforeSlice = before?.origins?.[origin];
+  const afterSlice = after?.origins?.[origin];
+  return JSON.stringify(beforeSlice) !== JSON.stringify(afterSlice);
 }
 
 function toErrorMessage(error: unknown): string {

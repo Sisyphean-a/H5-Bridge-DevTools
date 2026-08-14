@@ -8,6 +8,7 @@ import { createResponseDraft, createSenderDraft } from "./utils";
 import {
   hasActiveExtensionRuntime,
   isExtensionContextInvalidatedError,
+  matchesContentScriptPattern,
   syncSnapshotState,
 } from "./helpers";
 import type { AppViewState } from "./types";
@@ -236,5 +237,36 @@ describe("panel runtime guards", () => {
       isExtensionContextInvalidatedError(new Error("Attempting to use a disconnected port object")),
     ).toBe(false);
     expect(isExtensionContextInvalidatedError("Extension context invalidated")).toBe(false);
+  });
+});
+
+describe("matchesContentScriptPattern", () => {
+  const patterns = [
+    "http://localhost/*",
+    "http://localhost:*/*",
+    "http://127.0.0.1/*",
+    "https://*.example.com/*",
+  ];
+
+  it("精确匹配协议与主机", () => {
+    expect(matchesContentScriptPattern("http://localhost:5173/page", patterns)).toBe(true);
+    expect(matchesContentScriptPattern("http://localhost/page", patterns)).toBe(true);
+    expect(matchesContentScriptPattern("http://127.0.0.1:8080", patterns)).toBe(true);
+  });
+
+  it("通配子域匹配", () => {
+    expect(matchesContentScriptPattern("https://api.example.com/x", patterns)).toBe(true);
+    expect(matchesContentScriptPattern("https://example.com/x", patterns)).toBe(true);
+  });
+
+  it("协议或主机不匹配时拒绝", () => {
+    expect(matchesContentScriptPattern("https://localhost/page", patterns)).toBe(false);
+    expect(matchesContentScriptPattern("http://192.168.1.1/page", patterns)).toBe(false);
+    expect(matchesContentScriptPattern("https://evil.com/?u=localhost", patterns)).toBe(false);
+  });
+
+  it("无效 URL 与 <all_urls>", () => {
+    expect(matchesContentScriptPattern("not a url", patterns)).toBe(false);
+    expect(matchesContentScriptPattern("https://anywhere.test/x", ["<all_urls>"])).toBe(true);
   });
 });

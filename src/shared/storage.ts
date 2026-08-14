@@ -55,14 +55,34 @@ export function createDefaultOriginState(): OriginScopedBridgeState {
 }
 
 export async function readStorageState(): Promise<BridgeStorageState> {
-  const stored = await chrome.storage.local.get(STORAGE_KEY);
-  const snapshot = stored[STORAGE_KEY] as BridgeStorageState | undefined;
+  const snapshot = await readStorageStateRaw();
   if (snapshot) {
     return normalizeStorageState(snapshot);
   }
 
   const migrated = await migrateLegacyState();
   return normalizeStorageState(migrated);
+}
+
+/**
+ * 未经归一化的原始读取，供内部读改写路径使用：
+ * 扩展是本键的唯一写入方，写入的始终是归一化形状。
+ */
+export async function readStorageStateRaw(): Promise<BridgeStorageState | undefined> {
+  const stored = await chrome.storage.local.get(STORAGE_KEY);
+  return stored[STORAGE_KEY] as BridgeStorageState | undefined;
+}
+
+/**
+ * 写路径使用的当前态读取：有 v2 键直接返回原始值（不再全量归一化），
+ * 否则先执行 v1 迁移。迁移只在 v2 键缺失时发生一次。
+ */
+export async function readStorageStateForWrite(): Promise<BridgeStorageState> {
+  const raw = await readStorageStateRaw();
+  if (raw) {
+    return raw;
+  }
+  return (await migrateLegacyState()) ?? { globalEnabled: true, origins: {} };
 }
 
 async function migrateLegacyState(): Promise<BridgeStorageState | undefined> {
@@ -74,6 +94,11 @@ async function migrateLegacyState(): Promise<BridgeStorageState | undefined> {
 
   const migrated = migrateStorageState(legacy);
   await writeStorageState(migrated);
+  try {
+    await chrome.storage.local.remove(LEGACY_STORAGE_KEY);
+  } catch {
+    // 旧键残留只会让下次读取重复迁移，结果幂等
+  }
   return migrated;
 }
 
@@ -82,7 +107,12 @@ export async function writeStorageState(state: BridgeStorageState): Promise<void
 }
 
 export async function ensureOriginState(origin: string): Promise<BridgeStorageState> {
-  const state = await readStorageState();
+  const raw = await readStorageStateRaw();
+  if (raw && isScopedOriginState(raw.origins[origin])) {
+    return raw;
+  }
+
+  const state = raw ? normalizeStorageState(raw) : await readStorageState();
   if (state.origins[origin]) {
     return state;
   }
@@ -120,9 +150,29 @@ export async function readOriginScopedState(
 ): Promise<{ globalEnabled: boolean; originState: OriginScopedBridgeState }> {
   const state = await ensureOriginState(origin);
   return {
-    globalEnabled: state.globalEnabled,
+    globalEnabled: state.globalEnabled ?? true,
     originState: cloneJson(state.origins[origin] ?? createDefaultOriginState()),
   };
+}
+
+/**
+ * 写路径专用：把整个 origin 切片写回存储。仅用于内容脚本初始化等
+ * 低频全量写入；运行期增量写入走后台的 APPLY_STATE_COMMAND。
+ */
+export async function persistOriginScopedState(
+  origin: string,
+  globalEnabled: boolean,
+  originState: OriginScopedBridgeState,
+): Promise<void> {
+  const current = await readStorageStateForWrite();
+  await writeStorageState({
+    ...current,
+    globalEnabled,
+    origins: {
+      ...current.origins,
+      [origin]: cloneJson(originState),
+    },
+  });
 }
 
 export async function updateStorageState(
@@ -244,11 +294,9 @@ function normalizeOriginState(
   }
 
   const activeProfileId = profiles[state.activeProfileId] ? state.activeProfileId : DEFAULT_BRIDGE_PROFILE_ID;
+  // 只保留仍出现在方案定义里的宿主对象：被替换/删除方案遗留的宿主无法再被管理。
   const knownHostObjects = Array.from(
-    new Set([
-      ...(Array.isArray(state.knownHostObjects) ? state.knownHostObjects : []),
-      ...Object.values(definitions).map((profile) => profile.hostObject),
-    ]),
+    new Set(Object.values(definitions).map((profile) => profile.hostObject)),
   );
   return { activeProfileId, profileDefinitions: definitions, knownHostObjects, profiles };
 }
