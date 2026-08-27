@@ -276,7 +276,7 @@ const panelStyle: CSSProperties = {
   background: panelTheme.panel,
 };
 
-const bodyStyle: CSSProperties = { flex: 1, overflowY: "auto" };
+const bodyStyle: CSSProperties = { flex: 1, minHeight: 0, overflowY: "auto" };
 const sectionTitleStyle: CSSProperties = {
   padding: "10px 12px 4px",
   background: panelTheme.bg,

@@ -90,6 +90,18 @@ describe("setRuntimeSnapshot", () => {
   });
 });
 
+describe("initializeRuntime", () => {
+  it("已有全局存储但当前 origin 尚未初始化时也能初始化", async () => {
+    storageBucket[STORAGE_KEY] = { globalEnabled: true, origins: {} };
+    const runtime = createRuntime();
+
+    await expect(initializeRuntime(runtime)).resolves.toBeUndefined();
+
+    const stored = storageBucket[STORAGE_KEY] as BridgeStorageState;
+    expect(stored.origins[origin]).toBeDefined();
+  });
+});
+
 describe("applyCommand", () => {
   it("应用命令到本地镜像，并经后台写入共享存储", async () => {
     const runtime = createRuntime();

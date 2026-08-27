@@ -108,7 +108,8 @@ export async function writeStorageState(state: BridgeStorageState): Promise<void
 
 export async function ensureOriginState(origin: string): Promise<BridgeStorageState> {
   const raw = await readStorageStateRaw();
-  if (raw && isScopedOriginState(raw.origins[origin])) {
+  const rawOriginState = raw?.origins?.[origin];
+  if (raw && isScopedOriginState(rawOriginState)) {
     return raw;
   }
 
@@ -331,10 +332,8 @@ function getActiveProfileState(originState: OriginScopedBridgeState): OriginBrid
   );
 }
 
-function isScopedOriginState(
-  state: OriginScopedBridgeState | OriginBridgeProfileState,
-): state is OriginScopedBridgeState {
-  return "profiles" in state;
+function isScopedOriginState(state: unknown): state is OriginScopedBridgeState {
+  return typeof state === "object" && state !== null && "profiles" in state;
 }
 
 function normalizeSenders(senders: BridgeSender[]): BridgeSender[] {
